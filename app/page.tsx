@@ -126,7 +126,7 @@ export default function Home() {
             ) : (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <div>
-                  <div style={{ fontSize: 11, color: '#475569', marginBottom: 2 }}>{userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : '⚾ 선수'} · 팀 코드</div>
+                  <div style={{ fontSize: 11, color: '#475569', marginBottom: 2 }}>{userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : userRole === 'player' ? '⚾ 선수' : userRole} · 팀 코드</div>
                   <div style={{ fontSize: 18, fontWeight: 900, color: '#60a5fa', letterSpacing: 1 }}>{teamCode}</div>
                 </div>
                 <button onClick={() => { setEditingCode(true); setNewCode(teamCode); }} style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
