@@ -37,6 +37,7 @@ function calcPit(s: PitStats) {
 
 export default function TeamPage() {
   const router = useRouter();
+  const [isManager, setIsManager] = useState(false);
   const [tab, setTab] = useState<typeof TABS[number]>('선수 관리');
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -50,13 +51,15 @@ export default function TeamPage() {
   const [editingId, setEditingId] = useState('');
   const [batForm, setBatForm] = useState<BatStats>(EMPTY_BAT);
   const [pitForm, setPitForm] = useState<PitStats>(EMPTY_PIT);
-  // 타순: teamId → 9칸 player id (빈 슬롯은 '')
   const [lineups, setLineups] = useState<Record<string, string[]>>({});
-  // 로테이션: teamId → 5칸 player id
   const [rotations, setRotations] = useState<Record<string, string[]>>({});
   const [pickingSlot, setPickingSlot] = useState<{ type: 'lineup'|'rotation'; idx: number } | null>(null);
 
   useEffect(() => {
+    const raw = localStorage.getItem('pitchcom-session');
+    if (!raw) { router.push('/login'); return; }
+    const session = JSON.parse(raw);
+    setIsManager(session.role === 'manager');
     const t = JSON.parse(localStorage.getItem('pitchcom-teams') || '[]') as Team[];
     setTeams(t);
     if (t.length > 0) setSelectedTeam(t[0].id);
@@ -64,7 +67,7 @@ export default function TeamPage() {
     setAllPit(JSON.parse(localStorage.getItem('pitchcom-pit-stats') || '{}'));
     setLineups(JSON.parse(localStorage.getItem('pitchcom-lineups') || '{}'));
     setRotations(JSON.parse(localStorage.getItem('pitchcom-rotations') || '{}'));
-  }, []);
+  }, [router]);
 
   const saveTeams = (next: Team[]) => { setTeams(next); localStorage.setItem('pitchcom-teams', JSON.stringify(next)); };
   const saveBat = (next: AllBat) => { setAllBat(next); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); };
@@ -102,24 +105,12 @@ export default function TeamPage() {
   const bf = (k: keyof BatStats, v: string) => setBatForm(f => ({ ...f, [k]: Math.max(0, parseInt(v) || 0) }));
   const pf = (k: keyof PitStats, v: string) => setPitForm(f => ({ ...f, [k]: k === 'ip' ? Math.max(0, parseFloat(v) || 0) : Math.max(0, parseInt(v) || 0) }));
 
-  const PlayerCard = ({ p, children }: { p: typeof allPlayers[0]; children: React.ReactNode }) => (
-    <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
-      <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #0f172a' }}>
-        <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
-          <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
-
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>👥 팀/선수 관리</h1>
+        {!isManager && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}
       </div>
 
       <div style={{ display: 'flex', background: '#1e293b', borderRadius: 14, padding: 4, marginBottom: 20, gap: 3, flexWrap: 'wrap' }}>
@@ -145,10 +136,12 @@ export default function TeamPage() {
                 fontSize: 13, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6,
               }}>
                 {t.name}
-                <span onClick={e => { e.stopPropagation(); removeTeam(t.id); }} style={{ fontSize: 13, color: selectedTeam === t.id ? 'rgba(255,255,255,0.5)' : '#475569' }}>×</span>
+                {isManager && (
+                  <span onClick={e => { e.stopPropagation(); removeTeam(t.id); }} style={{ fontSize: 13, color: selectedTeam === t.id ? 'rgba(255,255,255,0.5)' : '#475569' }}>×</span>
+                )}
               </button>
             ))}
-            {addingTeam ? (
+            {isManager && (addingTeam ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <input autoFocus value={newTeamName} onChange={e => setNewTeamName(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTeam()} placeholder="팀 이름"
                   style={{ padding: '8px 12px', borderRadius: 10, border: '1.5px solid #334155', background: '#1e293b', color: '#f8fafc', fontSize: 13, outline: 'none', width: 100 }} />
@@ -156,18 +149,20 @@ export default function TeamPage() {
               </div>
             ) : (
               <button onClick={() => setAddingTeam(true)} style={{ padding: '9px 14px', borderRadius: 20, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 팀</button>
-            )}
+            ))}
           </div>
 
           {currentTeam ? (
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <span style={{ fontSize: 13, color: '#64748b', fontWeight: 700 }}>선수 {currentTeam.players.length}명</span>
-                <button onClick={() => { setAddingPlayer(true); setEditingPlayer(null); setPlayerForm({ name: '', number: '', position: [] }); }}
-                  style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 선수 추가</button>
+                {isManager && (
+                  <button onClick={() => { setAddingPlayer(true); setEditingPlayer(null); setPlayerForm({ name: '', number: '', position: [] }); }}
+                    style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 선수 추가</button>
+                )}
               </div>
 
-              {addingPlayer && (
+              {isManager && addingPlayer && (
                 <div style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input value={playerForm.number} onChange={e => setPlayerForm(f => ({ ...f, number: e.target.value }))} placeholder="번호"
@@ -188,7 +183,7 @@ export default function TeamPage() {
                 </div>
               )}
 
-              {editingPlayer && (
+              {isManager && editingPlayer && (
                 <div style={{ background: '#1e3a5f', borderRadius: 16, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <p style={{ margin: 0, fontSize: 13, color: '#60a5fa', fontWeight: 700 }}>선수 정보 수정</p>
                   <div style={{ display: 'flex', gap: 8 }}>
@@ -211,7 +206,7 @@ export default function TeamPage() {
               )}
 
               {currentTeam.players.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>선수를 추가해보세요</p></div>
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{isManager ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
               ) : (
                 <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
                   {currentTeam.players.map((p, i) => (
@@ -221,16 +216,20 @@ export default function TeamPage() {
                         <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{p.name}</div>
                         <div style={{ fontSize: 12, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')}</div>
                       </div>
-                      <button onClick={() => { setEditingPlayer(p); setAddingPlayer(false); setPlayerForm({ name: p.name, number: p.number, position: Array.isArray(p.position) ? p.position : [p.position] }); }}
-                        style={{ background: 'none', border: '1px solid #334155', borderRadius: 8, color: '#64748b', fontSize: 12, cursor: 'pointer', padding: '5px 10px' }}>수정</button>
-                      <button onClick={() => removePlayer(p.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer' }}>🗑️</button>
+                      {isManager && (
+                        <>
+                          <button onClick={() => { setEditingPlayer(p); setAddingPlayer(false); setPlayerForm({ name: p.name, number: p.number, position: Array.isArray(p.position) ? p.position : [p.position] }); }}
+                            style={{ background: 'none', border: '1px solid #334155', borderRadius: 8, color: '#64748b', fontSize: 12, cursor: 'pointer', padding: '5px 10px' }}>수정</button>
+                          <button onClick={() => removePlayer(p.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer' }}>🗑️</button>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
             </>
           ) : (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}><p>팀을 먼저 추가해주세요</p></div>
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}><p>{isManager ? '팀을 먼저 추가해주세요' : '등록된 팀이 없어요'}</p></div>
           )}
         </>
       )}
@@ -255,14 +254,16 @@ export default function TeamPage() {
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
                   </div>
-                  <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setBatForm(allBat[p.id] ?? { ...EMPTY_BAT }); } }} style={{
-                    padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#3b82f6'}`,
-                    background: isEditing ? 'transparent' : '#1e3a5f', color: isEditing ? '#64748b' : '#60a5fa',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  }}>{isEditing ? '닫기' : '입력'}</button>
+                  {isManager && (
+                    <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setBatForm(allBat[p.id] ?? { ...EMPTY_BAT }); } }} style={{
+                      padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#3b82f6'}`,
+                      background: isEditing ? 'transparent' : '#1e3a5f', color: isEditing ? '#64748b' : '#60a5fa',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}>{isEditing ? '닫기' : '입력'}</button>
+                  )}
                 </div>
 
-                {isEditing && (
+                {isManager && isEditing && (
                   <div style={{ padding: '16px 18px', borderBottom: '1px solid #0f172a', background: '#0f1e35' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
                       {([['타석','pa'],['타수','ab'],['안타','h'],['볼넷','bb'],['2루타','d'],['3루타','t'],['홈런','hr'],['사구','hbp'],['타점','rbi'],['득점','r'],['삼진','so']] as [string, keyof BatStats][]).map(([label, key]) => (
@@ -322,14 +323,16 @@ export default function TeamPage() {
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
                   </div>
-                  <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setPitForm(allPit[p.id] ?? { ...EMPTY_PIT }); } }} style={{
-                    padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#f97316'}`,
-                    background: isEditing ? 'transparent' : '#1c1107', color: isEditing ? '#64748b' : '#fb923c',
-                    fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                  }}>{isEditing ? '닫기' : '입력'}</button>
+                  {isManager && (
+                    <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setPitForm(allPit[p.id] ?? { ...EMPTY_PIT }); } }} style={{
+                      padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#f97316'}`,
+                      background: isEditing ? 'transparent' : '#1c1107', color: isEditing ? '#64748b' : '#fb923c',
+                      fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}>{isEditing ? '닫기' : '입력'}</button>
+                  )}
                 </div>
 
-                {isEditing && (
+                {isManager && isEditing && (
                   <div style={{ padding: '16px 18px', borderBottom: '1px solid #0f172a', background: '#0f1e35' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
                       {([['이닝(IP)','ip'],['피안타','ha'],['자책점','er'],['볼넷','bb'],['탈삼진','k'],['사구','hbp'],['피홈런','hr']] as [string, keyof PitStats][]).map(([label, key]) => (
@@ -411,10 +414,10 @@ export default function TeamPage() {
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 32, height: 32, borderRadius: 10, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#60a5fa', flexShrink: 0 }}>{i + 1}</div>
-                        <button onClick={() => setPickingSlot(isActive ? null : { type: 'lineup', idx: i })} style={{
+                        <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'lineup', idx: i })} style={{
                           flex: 1, padding: '12px 16px', borderRadius: 12, border: `2px solid ${isActive ? '#3b82f6' : player ? '#1e293b' : '#334155'}`,
                           background: isActive ? '#1e3a5f' : player ? '#1e293b' : 'transparent',
-                          color: player ? '#f8fafc' : '#475569', cursor: 'pointer',
+                          color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
                         }}>
                           {player ? (
@@ -424,16 +427,16 @@ export default function TeamPage() {
                               <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>{player.position}</span>
                             </>
                           ) : (
-                            <span style={{ fontSize: 13 }}>탭하여 선수 선택</span>
+                            <span style={{ fontSize: 13 }}>{isManager ? '탭하여 선수 선택' : '—'}</span>
                           )}
                         </button>
-                        {player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
+                        {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
                       </div>
                     );
                   })}
                 </div>
 
-                {pickingSlot?.type === 'lineup' && (
+                {isManager && pickingSlot?.type === 'lineup' && (
                   <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', marginTop: 8 }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #0f172a' }}>
                       <p style={{ margin: 0, fontSize: 13, color: '#60a5fa', fontWeight: 700 }}>{pickingSlot.idx + 1}번 타순 선수 선택</p>
@@ -509,10 +512,10 @@ export default function TeamPage() {
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 64, fontSize: 11, fontWeight: 800, color, textAlign: 'center', flexShrink: 0 }}>{label}</div>
-                        <button onClick={() => setPickingSlot(isActive ? null : { type: 'rotation', idx: i })} style={{
+                        <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'rotation', idx: i })} style={{
                           flex: 1, padding: '13px 16px', borderRadius: 12, border: `2px solid ${isActive ? color : player ? `${color}44` : '#334155'}`,
                           background: isActive ? `${color}22` : player ? `${color}11` : 'transparent',
-                          color: player ? '#f8fafc' : '#475569', cursor: 'pointer',
+                          color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
                         }}>
                           {player ? (
@@ -522,16 +525,16 @@ export default function TeamPage() {
                               {allPit[player.id] && <span style={{ fontSize: 11, color, marginLeft: 'auto' }}>ERA {fmt2(calcPit(allPit[player.id]).era)}</span>}
                             </>
                           ) : (
-                            <span style={{ fontSize: 13 }}>탭하여 투수 선택</span>
+                            <span style={{ fontSize: 13 }}>{isManager ? '탭하여 투수 선택' : '—'}</span>
                           )}
                         </button>
-                        {player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
+                        {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
                       </div>
                     );
                   })}
                 </div>
 
-                {pickingSlot?.type === 'rotation' && (
+                {isManager && pickingSlot?.type === 'rotation' && (
                   <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #0f172a' }}>
                       <p style={{ margin: 0, fontSize: 13, color: '#fb923c', fontWeight: 700 }}>{SLOT_LABELS[pickingSlot.idx]} 선택</p>

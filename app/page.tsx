@@ -7,6 +7,7 @@ const MENUS = [
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
   { href: '/stats', emoji: '📊', label: '투구 통계', desc: '구종별 기록 및 분석', color: '#10b981' },
   { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록 관리', color: '#f59e0b' },
+  { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '팀원끼리 실시간 대화', color: '#8b5cf6' },
 ];
 
 export default function Home() {
@@ -90,7 +91,7 @@ export default function Home() {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{userName}</div>
               <div style={{ fontSize: 11, color: '#475569' }}>
-                {userRole === 'manager' ? '🧢 감독' : '📋 코치'} · {teamCode}
+                {userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : '⚾ 선수'} · {teamCode}
               </div>
             </div>
             <button onClick={logout} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -164,9 +165,32 @@ export default function Home() {
             ))}
           </div>
 
+          {/* 감독 전용 관리 버튼 */}
+          {userRole === 'manager' && (
+            <button
+              className="menu-card"
+              onClick={() => router.push('/admin')}
+              style={{
+                marginTop: 8, padding: '18px 22px', borderRadius: 20,
+                border: '1.5px solid #ef444422',
+                background: 'linear-gradient(135deg, #ef444411, #ef444406)',
+                color: '#f8fafc', cursor: 'pointer', textAlign: 'left',
+                display: 'flex', alignItems: 'center', gap: 18, width: '100%',
+                boxShadow: '0 4px 24px #ef444411',
+              }}
+            >
+              <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, background: '#ef444422', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🛡️</div>
+              <div>
+                <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>감독 관리</div>
+                <div style={{ fontSize: 13, color: '#64748b' }}>멤버 확인 및 계정 관리</div>
+              </div>
+              <span style={{ marginLeft: 'auto', color: '#334155', fontSize: 18 }}>›</span>
+            </button>
+          )}
+
           {/* 계정 삭제 (감독/코치 전용) */}
           {(userRole === 'manager' || userRole === 'coach') && (
-            <div style={{ marginTop: 32, textAlign: 'center' }}>
+            <div style={{ marginTop: 24, textAlign: 'center' }}>
               <button onClick={deleteAccount} style={{ padding: '8px 18px', borderRadius: 10, border: '1px solid #ef444433', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
                 계정 삭제
               </button>
