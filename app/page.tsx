@@ -15,6 +15,9 @@ export default function Home() {
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [editingCode, setEditingCode] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [codeError, setCodeError] = useState('');
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -29,6 +32,30 @@ export default function Home() {
   const logout = () => {
     localStorage.removeItem('pitchcom-session');
     router.push('/login');
+  };
+
+  const saveCode = () => {
+    const code = newCode.trim().toUpperCase();
+    if (!code) { setCodeError('팀 코드를 입력해주세요'); return; }
+    if (userRole === 'coach') {
+      try {
+        const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+        const managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
+        if (!managerExists) { setCodeError('존재하지 않는 팀 코드예요'); return; }
+      } catch {}
+    }
+    const raw = localStorage.getItem('pitchcom-session');
+    if (!raw) return;
+    const session = JSON.parse(raw);
+    session.teamCode = code;
+    localStorage.setItem('pitchcom-session', JSON.stringify(session));
+    const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    const updated = users.map((u: any) => u.id === session.id ? { ...u, teamCode: code } : u);
+    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+    setTeamCode(code);
+    setEditingCode(false);
+    setNewCode('');
+    setCodeError('');
   };
 
   if (!ready) return null;
@@ -63,6 +90,38 @@ export default function Home() {
         <div style={{ padding: '36px 24px', maxWidth: 480, margin: '0 auto' }}>
           <div style={{ marginBottom: 28 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>무엇을 할까요?</h1>
+          </div>
+
+          {/* 팀 코드 */}
+          <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155' }}>
+            {editingCode ? (
+              <div>
+                <p style={{ margin: '0 0 10px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>팀 코드 변경</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={newCode}
+                    onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                    onKeyDown={e => e.key === 'Enter' && saveCode()}
+                    placeholder="새 팀 코드"
+                    autoFocus
+                    style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #3b82f6', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 800, letterSpacing: 1, outline: 'none' }}
+                  />
+                  <button onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                  <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
+                </div>
+                {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontSize: 11, color: '#475569', marginBottom: 2 }}>{userRole === 'manager' ? '🧢 감독' : '📋 코치'} · 팀 코드</div>
+                  <div style={{ fontSize: 18, fontWeight: 900, color: '#60a5fa', letterSpacing: 1 }}>{teamCode}</div>
+                </div>
+                <button onClick={() => { setEditingCode(true); setNewCode(teamCode); }} style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                  변경
+                </button>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
