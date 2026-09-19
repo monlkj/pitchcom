@@ -83,7 +83,7 @@ export default function LoginPage() {
             padding: '32px 28px',
             boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
           }}>
-            <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: 14, textAlign: 'center' }}>팀 비밀번호를 입력하세요</p>
+            <p style={{ margin: '0 0 20px', color: '#94a3b8', fontSize: 14, textAlign: 'center' }}>로그인</p>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <input
