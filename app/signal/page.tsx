@@ -84,7 +84,7 @@ export default function SignalPage() {
   const sendSignal = (pitch: string) => {
     speak(pitch);
     setPendingPitch(pitch);
-    setRecorded(false);
+    setRecorded(null);
     setFlash(true);
     setTimeout(() => setFlash(false), 500);
   };
