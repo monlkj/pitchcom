@@ -25,24 +25,22 @@ function setSession(user: LocalUser) {
 }
 
 const ROLES = [
-  { r: 'manager' as Role, emoji: '🧢', label: '감독', desc: '팀 코드를 생성하고 팀을 관리해요' },
-  { r: 'coach' as Role, emoji: '📋', label: '코치', desc: '팀 코드를 입력해서 팀에 합류해요' },
-  { r: 'player' as Role, emoji: '⚾', label: '선수', desc: '팀 코드를 입력해서 팀에 합류해요' },
+  { r: 'manager' as Role, emoji: '🧢', label: '감독', desc: '팀을 만들고 관리해요' },
+  { r: 'coach' as Role, emoji: '📋', label: '코치', desc: '코칭 스태프로 팀에 합류해요' },
+  { r: 'player' as Role, emoji: '⚾', label: '선수', desc: '선수로 팀에 합류해요' },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'login' | 'signup'>('login');
-  const [step, setStep] = useState<'info' | 'role' | 'teamcode'>('info');
+  const [step, setStep] = useState<'info' | 'role'>('info');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [role, setRole] = useState<Role | ''>('');
-  const [teamCode, setTeamCode] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const resetSignup = () => { setStep('info'); setRole(''); setTeamCode(''); setError(''); };
+  const resetSignup = () => { setStep('info'); setError(''); };
 
   const handleLogin = () => {
     setError('');
@@ -53,7 +51,7 @@ export default function LoginPage() {
       const user = users.find(u => u.email === email && u.password === password);
       if (!user) { setError('이메일 또는 비밀번호가 틀렸어요'); setLoading(false); return; }
       setSession(user);
-      router.push('/');
+      router.push(user.teamCode ? '/' : '/teamcode');
     }, 300);
   };
 
@@ -68,36 +66,19 @@ export default function LoginPage() {
   };
 
   const handleRoleSelect = (r: Role) => {
-    setRole(r);
-    setStep('teamcode');
-  };
-
-  const handleTeamCode = () => {
-    setError('');
-    if (!teamCode.trim()) { setError('팀 코드를 입력해주세요'); return; }
-    const users = getUsers();
-    if (role === 'coach' || role === 'player') {
-      const managerExists = users.find(u => u.teamCode === teamCode.toUpperCase() && u.role === 'manager');
-      if (!managerExists) { setError('존재하지 않는 팀 코드예요'); return; }
-    }
-    if (role === 'manager') {
-      const codeExists = users.find(u => u.teamCode === teamCode.toUpperCase() && u.role === 'manager');
-      if (codeExists) { setError('이미 사용 중인 팀 코드예요'); return; }
-    }
     setLoading(true);
-    setTimeout(() => {
-      const newUser: LocalUser = {
-        id: Date.now().toString(),
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        role: role as Role,
-        teamCode: teamCode.toUpperCase(),
-      };
-      saveUsers([...users, newUser]);
-      setSession(newUser);
-      router.push('/');
-    }, 300);
+    const users = getUsers();
+    const newUser: LocalUser = {
+      id: Date.now().toString(),
+      name: name.trim(),
+      email: email.trim(),
+      password,
+      role: r,
+      teamCode: '',
+    };
+    saveUsers([...users, newUser]);
+    setSession(newUser);
+    router.push('/teamcode');
   };
 
   const inputStyle: React.CSSProperties = {
@@ -112,8 +93,6 @@ export default function LoginPage() {
     color: '#fff', fontSize: 16, fontWeight: 900,
     cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.2s',
   };
-
-  const selectedRole = ROLES.find(r => r.r === role);
 
   return (
     <>
@@ -152,6 +131,7 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* 로그인 */}
             {tab === 'login' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
@@ -161,6 +141,7 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* 회원가입 - info */}
             {tab === 'signup' && step === 'info' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={inputStyle} autoFocus />
@@ -171,12 +152,13 @@ export default function LoginPage() {
               </div>
             )}
 
+            {/* 회원가입 - 역할 선택 */}
             {tab === 'signup' && step === 'role' && (
               <div>
                 <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:15, fontWeight:700, textAlign:'center' }}>역할을 선택하세요</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
                   {ROLES.map(({ r, emoji, label, desc }) => (
-                    <button key={r} className="role-btn" onClick={() => handleRoleSelect(r)} style={{
+                    <button key={r} className="role-btn" onClick={() => handleRoleSelect(r)} disabled={loading} style={{
                       padding:'16px 20px', borderRadius:16, border:'1.5px solid #1e3a5f',
                       background:'#0f172a', color:'#f8fafc', cursor:'pointer', textAlign:'left',
                       display:'flex', alignItems:'center', gap:14, transition:'all 0.2s',
@@ -190,34 +172,6 @@ export default function LoginPage() {
                   ))}
                 </div>
                 <button onClick={resetSignup} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
-              </div>
-            )}
-
-            {tab === 'signup' && step === 'teamcode' && (
-              <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                <div style={{ textAlign:'center', marginBottom:4 }}>
-                  <span style={{ fontSize:32 }}>{selectedRole?.emoji}</span>
-                  <p style={{ margin:'8px 0 0', color:'#94a3b8', fontSize:14, fontWeight:700 }}>
-                    {role === 'manager' ? '팀 코드를 만드세요' : '팀 코드를 입력하세요'}
-                  </p>
-                  <p style={{ margin:'4px 0 0', color:'#475569', fontSize:12 }}>
-                    {role === 'manager' ? '감독님이 직접 설정하는 팀 고유 코드예요' : '감독님에게 팀 코드를 받아서 입력하세요'}
-                  </p>
-                </div>
-                <input
-                  type="text"
-                  value={teamCode}
-                  onChange={e=>setTeamCode(e.target.value.toUpperCase())}
-                  onKeyDown={e=>e.key==='Enter'&&handleTeamCode()}
-                  placeholder="예: LIONS2026"
-                  style={{ ...inputStyle, textAlign:'center', fontSize:18, fontWeight:800, letterSpacing:2 }}
-                  autoFocus
-                />
-                {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
-                <button onClick={handleTeamCode} disabled={loading} style={btnPrimary}>
-                  {loading ? '처리 중...' : role === 'manager' ? '팀 만들기 →' : '팀 합류하기 →'}
-                </button>
-                <button onClick={() => { setStep('role'); setError(''); }} style={{ padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
               </div>
             )}
           </div>

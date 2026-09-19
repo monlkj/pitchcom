@@ -23,6 +23,7 @@ export default function Home() {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
+    if (!session.teamCode) { router.push('/teamcode'); return; }
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
     setTeamCode(session.teamCode ?? '');
