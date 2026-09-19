@@ -32,7 +32,7 @@ function PitcherContent() {
 
     const channel = supabase
       .channel(`pitchcom-${room}`)
-      .on('broadcast', { event: 'pitch' }, ({ payload }) => {
+      .on('broadcast', { event: 'pitch' }, ({ payload }: { payload: any }) => {
         if (payload.pitcher && payload.pitcher !== myName) return;
         setSignal(payload);
         setHistory(prev => [payload, ...prev].slice(0, 10));
@@ -46,7 +46,7 @@ function PitcherContent() {
         window.speechSynthesis.cancel();
         window.speechSynthesis.speak(utter);
       })
-      .subscribe(status => {
+      .subscribe((status: string) => {
         setConnected(status === 'SUBSCRIBED');
       });
 
