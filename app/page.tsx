@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../lib/supabase';
 
 const MENUS = [
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
@@ -12,32 +11,20 @@ const MENUS = [
 
 export default function Home() {
   const router = useRouter();
-  const [user, setUser] = useState<{ email: string; name: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) { router.push('/login'); }
-      else {
-        setUser({
-          email: data.user.email ?? '',
-          name: data.user.user_metadata?.full_name ?? data.user.email ?? '',
-        });
-        setLoading(false);
-      }
-    });
+    const auth = localStorage.getItem('pitchcom-auth');
+    if (!auth) { router.push('/login'); }
+    else { setReady(true); }
   }, [router]);
 
-  const logout = async () => {
-    await supabase.auth.signOut();
+  const logout = () => {
+    localStorage.removeItem('pitchcom-auth');
     router.push('/login');
   };
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ fontSize: 48, animation: 'spin 1s linear infinite' }}>⚾</div>
-    </div>
-  );
+  if (!ready) return null;
 
   return (
     <>
@@ -48,7 +35,6 @@ export default function Home() {
       `}</style>
       <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #020617 0%, #0f172a 60%, #0c1a3a 100%)', padding: '0 0 40px' }}>
 
-        {/* 헤더 */}
         <div style={{ padding: '20px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid #1e293b' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 26 }}>⚾</span>
@@ -59,7 +45,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 메인 */}
         <div style={{ padding: '36px 24px', maxWidth: 480, margin: '0 auto' }}>
           <div style={{ marginBottom: 28 }}>
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>무엇을 할까요?</h1>
