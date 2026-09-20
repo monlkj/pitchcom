@@ -51,7 +51,7 @@ export default function LoginPage() {
       const user = users.find(u => u.email === email && u.password === password);
       if (!user) { setError('이메일 또는 비밀번호가 틀렸어요'); setLoading(false); return; }
       setSession(user);
-      router.push(user.teamCode ? '/' : '/teamcode');
+      router.push('/');
     }, 300);
   };
 
@@ -78,7 +78,7 @@ export default function LoginPage() {
     };
     saveUsers([...users, newUser]);
     setSession(newUser);
-    router.push('/teamcode');
+    router.push('/');
   };
 
   const inputStyle: React.CSSProperties = {

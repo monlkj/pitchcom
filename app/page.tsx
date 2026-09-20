@@ -13,6 +13,7 @@ const MENUS = [
 export default function Home() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [sessionId, setSessionId] = useState('');
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
@@ -24,7 +25,7 @@ export default function Home() {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
-    if (!session.teamCode) { router.push('/teamcode'); return; }
+    setSessionId(session.id ?? '');
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
     setTeamCode(session.teamCode ?? '');
@@ -50,19 +51,20 @@ export default function Home() {
   const saveCode = () => {
     const code = newCode.trim().toUpperCase();
     if (!code) { setCodeError('팀 코드를 입력해주세요'); return; }
-    if (userRole === 'coach') {
-      try {
-        const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-        const managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
-        if (!managerExists) { setCodeError('존재하지 않는 팀 코드예요'); return; }
-      } catch {}
+    const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    if (userRole === 'coach' || userRole === 'player') {
+      const managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
+      if (!managerExists) { setCodeError('존재하지 않는 팀 코드예요'); return; }
+    }
+    if (userRole === 'manager' && !teamCode) {
+      const codeExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
+      if (codeExists) { setCodeError('이미 사용 중인 팀 코드예요'); return; }
     }
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) return;
     const session = JSON.parse(raw);
     session.teamCode = code;
     localStorage.setItem('pitchcom-session', JSON.stringify(session));
-    const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const updated = users.map((u: any) => u.id === session.id ? { ...u, teamCode: code } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     setTeamCode(code);
@@ -73,12 +75,15 @@ export default function Home() {
 
   if (!ready) return null;
 
+  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : '⚾ 선수';
+
   return (
     <>
       <style>{`
         @keyframes fadeUp { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
         .menu-card:hover { transform: translateY(-4px); }
         .menu-card { transition: transform 0.2s; }
+        input:focus { border-color: #3b82f6 !important; outline: none; }
       `}</style>
       <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #020617 0%, #0f172a 60%, #0c1a3a 100%)', padding: '0 0 40px' }}>
 
@@ -91,7 +96,7 @@ export default function Home() {
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{userName}</div>
               <div style={{ fontSize: 11, color: '#475569' }}>
-                {userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : '⚾ 선수'} · {teamCode}
+                {roleLabel}{teamCode ? ` · ${teamCode}` : ''}
               </div>
             </div>
             <button onClick={logout} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
@@ -105,37 +110,74 @@ export default function Home() {
             <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>무엇을 할까요?</h1>
           </div>
 
-          {/* 팀 코드 */}
-          <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155' }}>
-            {editingCode ? (
-              <div>
-                <p style={{ margin: '0 0 10px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>팀 코드 변경</p>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    value={newCode}
-                    onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
-                    onKeyDown={e => e.key === 'Enter' && saveCode()}
-                    placeholder="새 팀 코드"
-                    autoFocus
-                    style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #3b82f6', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 800, letterSpacing: 1, outline: 'none' }}
-                  />
-                  <button onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
-                  <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
-                </div>
-                {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
-              </div>
-            ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div>
-                  <div style={{ fontSize: 11, color: '#475569', marginBottom: 2 }}>{userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : userRole === 'player' ? '⚾ 선수' : userRole} · 팀 코드</div>
-                  <div style={{ fontSize: 18, fontWeight: 900, color: '#60a5fa', letterSpacing: 1 }}>{teamCode}</div>
-                </div>
-                <button onClick={() => { setEditingCode(true); setNewCode(teamCode); }} style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  변경
+          {/* ── 팀 코드 없을 때: 설정 카드 ── */}
+          {!teamCode ? (
+            <div style={{ marginBottom: 24, padding: '20px 20px', borderRadius: 18, background: '#1e293b', border: '1.5px solid #3b82f644' }}>
+              <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: '#60a5fa' }}>
+                {userRole === 'manager' ? '🧢 팀 코드를 만드세요' : '📨 팀 코드를 입력하세요'}
+              </p>
+              <p style={{ margin: '0 0 14px', fontSize: 12, color: '#475569' }}>
+                {userRole === 'manager'
+                  ? '팀원들이 이 코드로 합류해요'
+                  : '감독님에게 팀 코드를 받아서 입력하세요'}
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  value={newCode}
+                  onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                  onKeyDown={e => e.key === 'Enter' && saveCode()}
+                  placeholder={userRole === 'manager' ? '예: LIONS2026' : '팀 코드 입력'}
+                  autoFocus
+                  style={{
+                    flex: 1, padding: '12px 16px', borderRadius: 12,
+                    border: '1.5px solid #334155', background: '#0f172a',
+                    color: '#f8fafc', fontSize: 16, fontWeight: 800, letterSpacing: 1,
+                    transition: 'border-color 0.2s',
+                  }}
+                />
+                <button onClick={saveCode} style={{
+                  padding: '12px 20px', borderRadius: 12, border: 'none',
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                  color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
+                }}>
+                  {userRole === 'manager' ? '만들기' : '합류'}
                 </button>
               </div>
-            )}
-          </div>
+              {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
+            </div>
+          ) : (
+            /* ── 팀 코드 있을 때: 표시/변경 ── */
+            <div style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155' }}>
+              {editingCode ? (
+                <div>
+                  <p style={{ margin: '0 0 10px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>팀 코드 변경</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <input
+                      value={newCode}
+                      onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                      onKeyDown={e => e.key === 'Enter' && saveCode()}
+                      placeholder="새 팀 코드"
+                      autoFocus
+                      style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #3b82f6', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 800, letterSpacing: 1, outline: 'none' }}
+                    />
+                    <button onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                    <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
+                  </div>
+                  {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <div style={{ fontSize: 11, color: '#475569', marginBottom: 2 }}>{roleLabel} · 팀 코드</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: '#60a5fa', letterSpacing: 1 }}>{teamCode}</div>
+                  </div>
+                  <button onClick={() => { setEditingCode(true); setNewCode(teamCode); }} style={{ padding: '7px 14px', borderRadius: 9, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
+                    변경
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             {MENUS.map((m, i) => (
