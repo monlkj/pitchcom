@@ -6,39 +6,57 @@ import { useRouter } from 'next/navigation';
 const PALETTE = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 const getColor = (i: number) => PALETTE[i % PALETTE.length];
 
-interface Record { pitch: string; pitcher: string; result?: 'strike' | 'ball'; date: string; time: number; }
+interface PitchRecord { pitch: string; pitcher: string; result?: 'strike' | 'ball'; date: string; time: number; }
+
+function calcStats(recs: PitchRecord[]) {
+  const total = recs.length;
+  const withResult = recs.filter(r => r.result);
+  const strikes = withResult.filter(r => r.result === 'strike').length;
+  const balls = withResult.filter(r => r.result === 'ball').length;
+  const strikePct = withResult.length ? Math.round((strikes / withResult.length) * 100) : null;
+
+  const pitchMap: Record<string, { total: number; strikes: number; balls: number }> = {};
+  recs.forEach(r => {
+    if (!pitchMap[r.pitch]) pitchMap[r.pitch] = { total: 0, strikes: 0, balls: 0 };
+    pitchMap[r.pitch].total++;
+    if (r.result === 'strike') pitchMap[r.pitch].strikes++;
+    if (r.result === 'ball') pitchMap[r.pitch].balls++;
+  });
+
+  const pitches = Object.entries(pitchMap)
+    .map(([label, v]) => ({
+      label,
+      count: v.total,
+      pct: total ? Math.round((v.total / total) * 100) : 0,
+      strikes: v.strikes,
+      balls: v.balls,
+      strikePct: (v.strikes + v.balls) ? Math.round((v.strikes / (v.strikes + v.balls)) * 100) : null,
+    }))
+    .sort((a, b) => b.count - a.count);
+
+  return { total, strikes, balls, strikePct, withResult: withResult.length, pitches };
+}
 
 export default function StatsPage() {
   const router = useRouter();
-  const [records, setRecords] = useState<Record[]>([]);
-  const [filterPitcher, setFilterPitcher] = useState('전체');
-  const [pitchers, setPitchers] = useState<string[]>([]);
+  const [records, setRecords] = useState<PitchRecord[]>([]);
+  const [expandedPitcher, setExpandedPitcher] = useState<string | null>(null);
 
   useEffect(() => {
-    const raw = localStorage.getItem('pitchcom-stats');
-    if (raw) {
-      const data = JSON.parse(raw) as Record[];
-      setRecords(data);
-      const names = Array.from(new Set(data.map(r => r.pitcher).filter(Boolean)));
-      setPitchers(names);
-    }
+    try {
+      const raw = localStorage.getItem('pitchcom-stats');
+      if (raw) setRecords(JSON.parse(raw) as PitchRecord[]);
+    } catch {}
   }, []);
 
-  const filtered = filterPitcher === '전체' ? records : records.filter(r => r.pitcher === filterPitcher);
-  const total = filtered.length;
-
-  const uniquePitches = Array.from(new Set(filtered.map(r => r.pitch)));
-  const counts = uniquePitches.map(p => ({
-    label: p,
-    count: filtered.filter(r => r.pitch === p).length,
-    pct: total ? Math.round((filtered.filter(r => r.pitch === p).length / total) * 100) : 0,
-  })).sort((a, b) => b.count - a.count);
-
   const clearStats = () => {
-    if (!confirm('통계를 초기화할까요?')) return;
+    if (!confirm('통계를 모두 초기화할까요?')) return;
     localStorage.removeItem('pitchcom-stats');
     setRecords([]);
   };
+
+  const pitcherNames = Array.from(new Set(records.map(r => r.pitcher || '(이름 없음')));
+  const overall = calcStats(records);
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 480, margin: '0 auto' }}>
@@ -46,27 +64,11 @@ export default function StatsPage() {
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>📊 투구 통계</h1>
         {records.length > 0 && (
-          <button onClick={clearStats} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid #dc2626', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-            초기화
-          </button>
+          <button onClick={clearStats} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid #dc2626', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>초기화</button>
         )}
       </div>
 
-      {/* 투수 필터 */}
-      {pitchers.length > 0 && (
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 20 }}>
-          {['전체', ...pitchers].map(name => (
-            <button key={name} onClick={() => setFilterPitcher(name)} style={{
-              padding: '8px 16px', borderRadius: 20, border: 'none',
-              background: filterPitcher === name ? '#3b82f6' : '#1e293b',
-              color: filterPitcher === name ? '#fff' : '#94a3b8',
-              fontSize: 13, fontWeight: 700, cursor: 'pointer',
-            }}>{name}</button>
-          ))}
-        </div>
-      )}
-
-      {total === 0 ? (
+      {records.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
           <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
           <p style={{ margin: 0, fontSize: 15 }}>아직 기록된 투구가 없어요</p>
@@ -74,73 +76,148 @@ export default function StatsPage() {
         </div>
       ) : (
         <>
-          {/* 총계 */}
-          <div style={{ background: '#1e293b', borderRadius: 16, padding: '18px 20px', marginBottom: 16, display: 'flex', gap: 20 }}>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{total}</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>총 투구</div>
+          {/* ── 전체 요약 ── */}
+          <div style={{ background: '#1e293b', borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#475569', fontWeight: 700 }}>전체 요약</p>
+            <div style={{ display: 'flex', gap: 0 }}>
+              {[
+                ['총 투구', overall.total, '#f8fafc'],
+                ['투수', pitcherNames.length, '#60a5fa'],
+                ['구종', overall.pitches.length, '#a78bfa'],
+              ].map(([label, val, color], i, arr) => (
+                <div key={label as string} style={{ flex: 1, textAlign: 'center', borderRight: i < arr.length - 1 ? '1px solid #334155' : 'none' }}>
+                  <div style={{ fontSize: 26, fontWeight: 900, color: color as string }}>{val as number}</div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{label as string}</div>
+                </div>
+              ))}
             </div>
-            <div style={{ width: 1, background: '#334155' }} />
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{counts[0]?.count ?? 0}</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>최다 {counts[0]?.label}</div>
-            </div>
-            <div style={{ width: 1, background: '#334155' }} />
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: 28, fontWeight: 900, color: '#f8fafc' }}>{counts.length}</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>구종 수</div>
-            </div>
+            {overall.withResult > 0 && (
+              <div style={{ marginTop: 14 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>🔥 스트라이크 {overall.strikes} ({overall.strikePct}%)</span>
+                  <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700 }}>💧 볼 {overall.balls}</span>
+                </div>
+                <div style={{ height: 8, borderRadius: 4, background: '#0f172a', overflow: 'hidden', display: 'flex' }}>
+                  <div style={{ width: `${overall.strikePct}%`, background: '#ef4444', transition: 'width 0.6s' }} />
+                  <div style={{ flex: 1, background: '#3b82f6' }} />
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* 스트라이크 / 볼 비율 */}
-          {(() => {
-            const withResult = filtered.filter(r => r.result);
-            const strikes = withResult.filter(r => r.result === 'strike').length;
-            const balls = withResult.filter(r => r.result === 'ball').length;
-            const resultTotal = withResult.length;
-            if (resultTotal === 0) return null;
-            const strikePct = Math.round((strikes / resultTotal) * 100);
-            const ballPct = 100 - strikePct;
-            return (
-              <div style={{ background: '#1e293b', borderRadius: 16, padding: '18px 20px', marginBottom: 16 }}>
-                <p style={{ margin: '0 0 14px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>스트라이크 / 볼 비율</p>
-                <div style={{ display: 'flex', gap: 16, marginBottom: 12 }}>
-                  <div style={{ flex: 1, textAlign: 'center', background: '#0f172a', borderRadius: 12, padding: '12px 0' }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: '#ef4444' }}>{strikes}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>🔥 스트라이크 {strikePct}%</div>
-                  </div>
-                  <div style={{ flex: 1, textAlign: 'center', background: '#0f172a', borderRadius: 12, padding: '12px 0' }}>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: '#3b82f6' }}>{balls}</div>
-                    <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>💧 볼 {ballPct}%</div>
-                  </div>
-                </div>
-                <div style={{ height: 10, borderRadius: 5, background: '#0f172a', overflow: 'hidden', display: 'flex' }}>
-                  <div style={{ width: `${strikePct}%`, background: '#ef4444', transition: 'width 0.6s ease' }} />
-                  <div style={{ width: `${ballPct}%`, background: '#3b82f6', transition: 'width 0.6s ease' }} />
-                </div>
-              </div>
-            );
-          })()}
+          {/* ── 선수별 카드 ── */}
+          <p style={{ margin: '0 0 12px', fontSize: 12, color: '#475569', fontWeight: 700 }}>선수별 통계</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {pitcherNames.map(name => {
+              const recs = records.filter(r => (r.pitcher || '(이름 없음)') === name);
+              const s = calcStats(recs);
+              const isOpen = expandedPitcher === name;
+              return (
+                <div key={name} style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', border: isOpen ? '1.5px solid #3b82f644' : '1.5px solid transparent' }}>
+                  {/* 카드 헤더 */}
+                  <button onClick={() => setExpandedPitcher(isOpen ? null : name)} style={{
+                    width: '100%', padding: '16px 18px', background: 'none', border: 'none', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left',
+                  }}>
+                    <div style={{ width: 42, height: 42, borderRadius: 12, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>⚾</div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>{name}</div>
+                      <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
+                        총 {s.total}구 · {s.pitches.length}구종
+                        {s.strikePct !== null ? ` · S% ${s.strikePct}%` : ''}
+                      </div>
+                    </div>
+                    {/* 미니 구종 도트 */}
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 80, justifyContent: 'flex-end' }}>
+                      {s.pitches.slice(0, 4).map((p, i) => (
+                        <div key={p.label} style={{ width: 10, height: 10, borderRadius: '50%', background: getColor(i) }} title={p.label} />
+                      ))}
+                      {s.pitches.length > 4 && <div style={{ fontSize: 10, color: '#475569' }}>+{s.pitches.length - 4}</div>}
+                    </div>
+                    <span style={{ color: '#334155', fontSize: 16, flexShrink: 0, transform: isOpen ? 'rotate(90deg)' : 'none', transition: '0.2s' }}>›</span>
+                  </button>
 
-          {/* 구종별 바 차트 */}
-          <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
-            {counts.map((c, i) => (
-              <div key={c.label} style={{ padding: '14px 18px', borderBottom: i < counts.length - 1 ? '1px solid #0f172a' : 'none' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: '50%', background: getColor(i), flexShrink: 0 }} />
-                    <span style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{c.label}</span>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, color: '#64748b' }}>{c.pct}%</span>
-                    <span style={{ fontSize: 16, fontWeight: 900, color: getColor(i) }}>{c.count}구</span>
-                  </div>
+                  {/* 펼쳐진 상세 */}
+                  {isOpen && (
+                    <div style={{ borderTop: '1px solid #0f172a', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+                      {/* 스트라이크/볼 */}
+                      {s.withResult > 0 && (
+                        <div>
+                          <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
+                            <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 20, fontWeight: 900, color: '#ef4444' }}>{s.strikes}</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>🔥 스트라이크 {s.strikePct}%</div>
+                            </div>
+                            <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 20, fontWeight: 900, color: '#3b82f6' }}>{s.balls}</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>💧 볼 {100 - (s.strikePct ?? 0)}%</div>
+                            </div>
+                          </div>
+                          <div style={{ height: 6, borderRadius: 3, background: '#0f172a', overflow: 'hidden', display: 'flex' }}>
+                            <div style={{ width: `${s.strikePct}%`, background: '#ef4444', transition: 'width 0.6s' }} />
+                            <div style={{ flex: 1, background: '#3b82f6' }} />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* 구종별 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                        {s.pitches.map((p, i) => (
+                          <div key={p.label}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 5 }}>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <div style={{ width: 8, height: 8, borderRadius: '50%', background: getColor(i), flexShrink: 0 }} />
+                                <span style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>{p.label}</span>
+                              </div>
+                              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                {p.strikePct !== null && (
+                                  <span style={{ fontSize: 11, color: '#64748b' }}>S {p.strikePct}%</span>
+                                )}
+                                <span style={{ fontSize: 12, color: '#94a3b8' }}>{p.pct}%</span>
+                                <span style={{ fontSize: 15, fontWeight: 900, color: getColor(i) }}>{p.count}구</span>
+                              </div>
+                            </div>
+                            <div style={{ height: 5, borderRadius: 3, background: '#0f172a', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${p.pct}%`, background: getColor(i), borderRadius: 3, transition: 'width 0.6s' }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* 최근 5구 */}
+                      {(() => {
+                        const recent = [...recs].sort((a, b) => b.time - a.time).slice(0, 5);
+                        return (
+                          <div>
+                            <p style={{ margin: '0 0 8px', fontSize: 11, color: '#475569', fontWeight: 700 }}>최근 투구</p>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              {recent.map((r, i) => {
+                                const pitchIdx = s.pitches.findIndex(p => p.label === r.pitch);
+                                return (
+                                  <div key={r.time + i} style={{
+                                    padding: '5px 10px', borderRadius: 20,
+                                    background: '#0f172a',
+                                    border: `1px solid ${r.result === 'strike' ? '#ef444444' : r.result === 'ball' ? '#3b82f644' : '#334155'}`,
+                                    fontSize: 12, fontWeight: 700,
+                                    color: r.result === 'strike' ? '#ef4444' : r.result === 'ball' ? '#60a5fa' : '#64748b',
+                                    display: 'flex', alignItems: 'center', gap: 5,
+                                  }}>
+                                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: getColor(pitchIdx >= 0 ? pitchIdx : 0), flexShrink: 0 }} />
+                                    {r.pitch}
+                                    {r.result && <span style={{ opacity: 0.6 }}>{r.result === 'strike' ? ' S' : ' B'}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  )}
                 </div>
-                <div style={{ height: 6, borderRadius: 3, background: '#0f172a', overflow: 'hidden' }}>
-                  <div style={{ height: '100%', borderRadius: 3, width: `${c.pct}%`, background: getColor(i), transition: 'width 0.6s ease' }} />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
