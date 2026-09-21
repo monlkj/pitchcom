@@ -219,48 +219,54 @@ export default function TeamPage() {
                 </div>
               )}
 
-              {isManager && editingPlayer && (
-                <div style={{ background: '#1e3a5f', borderRadius: 16, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <p style={{ margin: 0, fontSize: 13, color: '#60a5fa', fontWeight: 700 }}>선수 정보 수정</p>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <input value={playerForm.number} onChange={e => setPlayerForm(f => ({ ...f, number: e.target.value }))} placeholder="번호"
-                      style={{ width: 60, padding: '10px 12px', borderRadius: 10, border: '1.5px solid #1e40af', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none' }} />
-                    <input value={playerForm.name} onChange={e => setPlayerForm(f => ({ ...f, name: e.target.value }))} placeholder="이름"
-                      style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: '1.5px solid #1e40af', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none' }} />
-                  </div>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {POSITIONS.map(pos => {
-                      const on = playerForm.position.includes(pos);
-                      return <button key={pos} type="button" onClick={() => setPlayerForm(f => ({ ...f, position: on ? f.position.filter(x => x !== pos) : [...f.position, pos] }))} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${on ? '#3b82f6' : '#1e40af'}`, background: on ? '#1e3a8a' : 'transparent', color: on ? '#93c5fd' : '#4b6ead', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{pos}</button>;
-                    })}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={saveEditPlayer} style={{ flex: 1, padding: 11, borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>저장</button>
-                    <button onClick={() => setEditingPlayer(null)} style={{ padding: '11px 16px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>취소</button>
-                  </div>
-                </div>
-              )}
 
               {currentTeam.players.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{isManager ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
               ) : (
                 <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
-                  {currentTeam.players.map((p, i) => (
-                    <div key={p.id} style={{ padding: '14px 18px', borderBottom: i < currentTeam.players.length - 1 ? '1px solid #0f172a' : 'none', display: 'flex', alignItems: 'center', gap: 14 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{p.name}</div>
-                        <div style={{ fontSize: 12, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')}</div>
+                  {currentTeam.players.map((p, i) => {
+                    const isInlineEditing = editingPlayer?.id === p.id;
+                    return (
+                      <div key={p.id} style={{ borderBottom: i < currentTeam.players.length - 1 ? '1px solid #0f172a' : 'none' }}>
+                        <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{p.name}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')}</div>
+                          </div>
+                          {isManager && (
+                            <>
+                              <button onClick={() => {
+                                if (isInlineEditing) { setEditingPlayer(null); }
+                                else { setEditingPlayer(p); setAddingPlayer(false); setPlayerForm({ name: p.name, number: p.number, position: Array.isArray(p.position) ? p.position : [p.position] }); }
+                              }} style={{ background: 'none', border: `1px solid ${isInlineEditing ? '#3b82f6' : '#334155'}`, borderRadius: 8, color: isInlineEditing ? '#60a5fa' : '#64748b', fontSize: 12, cursor: 'pointer', padding: '5px 10px' }}>{isInlineEditing ? '닫기' : '수정'}</button>
+                              <button onClick={() => removePlayer(p.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer' }}>🗑️</button>
+                            </>
+                          )}
+                        </div>
+                        {isManager && isInlineEditing && (
+                          <div style={{ background: '#1e3a5f', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <input value={playerForm.number} onChange={e => setPlayerForm(f => ({ ...f, number: e.target.value }))} placeholder="번호"
+                                style={{ width: 60, padding: '10px 12px', borderRadius: 10, border: '1.5px solid #1e40af', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none' }} />
+                              <input value={playerForm.name} onChange={e => setPlayerForm(f => ({ ...f, name: e.target.value }))} placeholder="이름"
+                                style={{ flex: 1, padding: '10px 12px', borderRadius: 10, border: '1.5px solid #1e40af', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none' }} />
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                              {POSITIONS.map(pos => {
+                                const on = playerForm.position.includes(pos);
+                                return <button key={pos} type="button" onClick={() => setPlayerForm(f => ({ ...f, position: on ? f.position.filter(x => x !== pos) : [...f.position, pos] }))} style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${on ? '#3b82f6' : '#1e40af'}`, background: on ? '#1e3a8a' : 'transparent', color: on ? '#93c5fd' : '#4b6ead', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{pos}</button>;
+                              })}
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                              <button onClick={saveEditPlayer} style={{ flex: 1, padding: 11, borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                              <button onClick={() => setEditingPlayer(null)} style={{ padding: '11px 16px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>취소</button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                      {isManager && (
-                        <>
-                          <button onClick={() => { setEditingPlayer(p); setAddingPlayer(false); setPlayerForm({ name: p.name, number: p.number, position: Array.isArray(p.position) ? p.position : [p.position] }); }}
-                            style={{ background: 'none', border: '1px solid #334155', borderRadius: 8, color: '#64748b', fontSize: 12, cursor: 'pointer', padding: '5px 10px' }}>수정</button>
-                          <button onClick={() => removePlayer(p.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer' }}>🗑️</button>
-                        </>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </>
