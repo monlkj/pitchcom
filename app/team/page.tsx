@@ -500,7 +500,7 @@ export default function TeamPage() {
       {tab === '로테이션' && (() => {
         const teamPlayers = currentTeam?.players ?? [];
         const pitchers = teamPlayers.filter(p => (Array.isArray(p.position) ? p.position : [p.position]).includes('투수'));
-        const rotation: string[] = rotations[selectedTeam] ?? Array(6).fill('');
+        const rotation: string[] = rotations[selectedTeam] ?? Array(12).fill('');
         const saveRotation = (next: string[]) => {
           const n = { ...rotations, [selectedTeam]: next };
           setRotations(n); localStorage.setItem('pitchcom-rotations', JSON.stringify(n)); syncWrite(teamCode, 'rotations', n);
@@ -514,8 +514,8 @@ export default function TeamPage() {
           const next = [...rotation]; next[idx] = '';
           saveRotation(next);
         };
-        const SLOT_LABELS = ['1선발', '2선발', '3선발', '4선발', '5선발', '불펜/마무리'];
-        const SLOT_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#64748b'];
+        const SLOT_LABELS = ['1선발', '2선발', '3선발', '4선발', '5선발', '불펜1', '불펜2', '불펜3', '불펜4', '불펜5', '셋업맨', '마무리'];
+        const SLOT_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#8b5cf6', '#f97316', '#64748b', '#64748b', '#64748b', '#64748b', '#64748b', '#06b6d4', '#ef4444'];
         return (
           <>
             {!currentTeam ? (
