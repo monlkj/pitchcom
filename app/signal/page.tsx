@@ -126,6 +126,7 @@ export default function SignalPage() {
     const pitcher = pitchers.find(p => p.id === selectedId);
     stats.push({ pitch: pendingPitch, pitcher: pitcher?.name ?? '', result, date: new Date().toISOString().slice(0, 10), time: Date.now() });
     localStorage.setItem('pitchcom-stats', JSON.stringify(stats));
+    syncWrite(teamCode, 'pitch-stats', stats);
     setLastPitch(pendingPitch);
     setPendingPitch('');
     setAwaitingResult(false);

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncRead, syncWrite } from '../../lib/teamSync';
 
 const PALETTE = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 const getColor = (i: number) => PALETTE[i % PALETTE.length];
@@ -41,18 +42,38 @@ export default function StatsPage() {
   const router = useRouter();
   const [records, setRecords] = useState<PitchRecord[]>([]);
   const [expandedPitcher, setExpandedPitcher] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [teamCode, setTeamCode] = useState('');
 
   useEffect(() => {
+    const raw = localStorage.getItem('pitchcom-session');
+    const code = raw ? (JSON.parse(raw).teamCode ?? '') : '';
+    setTeamCode(code);
+
+    // localStorage 캐시 우선 표시
     try {
-      const raw = localStorage.getItem('pitchcom-stats');
-      if (raw) setRecords(JSON.parse(raw) as PitchRecord[]);
+      const local = localStorage.getItem('pitchcom-stats');
+      if (local) setRecords(JSON.parse(local) as PitchRecord[]);
     } catch {}
+
+    // Supabase 동기화
+    if (code) {
+      setSyncing(true);
+      syncRead(code, 'pitch-stats').then(remote => {
+        setSyncing(false);
+        if (remote && Array.isArray(remote) && remote.length > 0) {
+          setRecords(remote);
+          localStorage.setItem('pitchcom-stats', JSON.stringify(remote));
+        }
+      });
+    }
   }, []);
 
   const clearStats = () => {
     if (!confirm('통계를 모두 초기화할까요?')) return;
     localStorage.removeItem('pitchcom-stats');
     setRecords([]);
+    syncWrite(teamCode, 'pitch-stats', []);
   };
 
   const pitcherNames = Array.from(new Set(records.map(r => r.pitcher || '(이름 없음')));
@@ -63,6 +84,7 @@ export default function StatsPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>📊 투구 통계</h1>
+        {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
         {records.length > 0 && (
           <button onClick={clearStats} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid #dc2626', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>초기화</button>
         )}
