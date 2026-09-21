@@ -28,7 +28,7 @@ export default function SignalPage() {
   const [lastPitch, setLastPitch] = useState('');
   const [flash, setFlash] = useState(false);
   const [awaitingResult, setAwaitingResult] = useState(false);
-  const [recorded, setRecorded] = useState<'strike'|'ball'|null>(null);
+  const [recorded, setRecorded] = useState<'strike'|'ball'|'foul'|null>(null);
   const [isManager, setIsManager] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -120,7 +120,7 @@ export default function SignalPage() {
     setAwaitingResult(true);
   };
 
-  const recordResult = (result: 'strike' | 'ball') => {
+  const recordResult = (result: 'strike' | 'ball' | 'foul') => {
     const raw = localStorage.getItem('pitchcom-stats');
     const stats = raw ? JSON.parse(raw) : [];
     const pitcher = pitchers.find(p => p.id === selectedId);
@@ -268,7 +268,7 @@ export default function SignalPage() {
           }}>
             {recorded ? (
               <div style={{ color: recorded === 'strike' ? '#ef4444' : '#3b82f6', fontSize: 16, fontWeight: 800 }}>
-                {recorded === 'strike' ? '🔥 스트라이크!' : '💧 볼!'} 기록 완료
+                {recorded === 'strike' ? '🔥 스트라이크!' : recorded === 'foul' ? '🌀 파울!' : '💧 볼!'} 기록 완료
               </div>
             ) : pendingPitch ? (
               <div>
@@ -297,17 +297,23 @@ export default function SignalPage() {
           )}
 
           {awaitingResult && (
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => recordResult('strike')} style={{
-                flex: 1, padding: '18px', borderRadius: 14, border: 'none',
+                flex: 1, padding: '16px 8px', borderRadius: 14, border: 'none',
                 background: 'linear-gradient(135deg, #ef4444, #b91c1c)',
-                color: '#fff', fontSize: 17, fontWeight: 900, cursor: 'pointer',
+                color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
                 boxShadow: '0 4px 16px rgba(239,68,68,0.3)',
               }}>🔥 스트라이크</button>
+              <button onClick={() => recordResult('foul')} style={{
+                flex: 1, padding: '16px 8px', borderRadius: 14, border: 'none',
+                background: 'linear-gradient(135deg, #f59e0b, #b45309)',
+                color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
+                boxShadow: '0 4px 16px rgba(245,158,11,0.3)',
+              }}>🌀 파울</button>
               <button onClick={() => recordResult('ball')} style={{
-                flex: 1, padding: '18px', borderRadius: 14, border: 'none',
+                flex: 1, padding: '16px 8px', borderRadius: 14, border: 'none',
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                color: '#fff', fontSize: 17, fontWeight: 900, cursor: 'pointer',
+                color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer',
                 boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
               }}>💧 볼</button>
             </div>

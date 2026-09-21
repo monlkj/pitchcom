@@ -7,20 +7,23 @@ import { syncRead, syncWrite } from '../../lib/teamSync';
 const PALETTE = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 const getColor = (i: number) => PALETTE[i % PALETTE.length];
 
-interface PitchRecord { pitch: string; pitcher: string; result?: 'strike' | 'ball'; date: string; time: number; }
+interface PitchRecord { pitch: string; pitcher: string; result?: 'strike' | 'ball' | 'foul'; date: string; time: number; }
 
 function calcStats(recs: PitchRecord[]) {
   const total = recs.length;
   const withResult = recs.filter(r => r.result);
-  const strikes = withResult.filter(r => r.result === 'strike').length;
+  // 파울은 스트라이크로 합산
+  const strikes = withResult.filter(r => r.result === 'strike' || r.result === 'foul').length;
+  const fouls = withResult.filter(r => r.result === 'foul').length;
   const balls = withResult.filter(r => r.result === 'ball').length;
   const strikePct = withResult.length ? Math.round((strikes / withResult.length) * 100) : null;
 
-  const pitchMap: Record<string, { total: number; strikes: number; balls: number }> = {};
+  const pitchMap: Record<string, { total: number; strikes: number; balls: number; fouls: number }> = {};
   recs.forEach(r => {
-    if (!pitchMap[r.pitch]) pitchMap[r.pitch] = { total: 0, strikes: 0, balls: 0 };
+    if (!pitchMap[r.pitch]) pitchMap[r.pitch] = { total: 0, strikes: 0, balls: 0, fouls: 0 };
     pitchMap[r.pitch].total++;
-    if (r.result === 'strike') pitchMap[r.pitch].strikes++;
+    if (r.result === 'strike' || r.result === 'foul') pitchMap[r.pitch].strikes++;
+    if (r.result === 'foul') pitchMap[r.pitch].fouls++;
     if (r.result === 'ball') pitchMap[r.pitch].balls++;
   });
 
@@ -30,12 +33,13 @@ function calcStats(recs: PitchRecord[]) {
       count: v.total,
       pct: total ? Math.round((v.total / total) * 100) : 0,
       strikes: v.strikes,
+      fouls: v.fouls,
       balls: v.balls,
       strikePct: (v.strikes + v.balls) ? Math.round((v.strikes / (v.strikes + v.balls)) * 100) : null,
     }))
     .sort((a, b) => b.count - a.count);
 
-  return { total, strikes, balls, strikePct, withResult: withResult.length, pitches };
+  return { total, strikes, fouls, balls, strikePct, withResult: withResult.length, pitches };
 }
 
 export default function StatsPage() {
@@ -119,7 +123,7 @@ export default function StatsPage() {
             {overall.withResult > 0 && (
               <div style={{ marginTop: 14 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>🔥 스트라이크 {overall.strikes} ({overall.strikePct}%)</span>
+                  <span style={{ fontSize: 12, color: '#ef4444', fontWeight: 700 }}>🔥 스트라이크 {overall.strikes} ({overall.strikePct}%){overall.fouls > 0 ? ` (파울 ${overall.fouls})` : ''}</span>
                   <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700 }}>💧 볼 {overall.balls}</span>
                 </div>
                 <div style={{ height: 8, borderRadius: 4, background: '#0f172a', overflow: 'hidden', display: 'flex' }}>
@@ -172,7 +176,7 @@ export default function StatsPage() {
                           <div style={{ display: 'flex', gap: 10, marginBottom: 8 }}>
                             <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
                               <div style={{ fontSize: 20, fontWeight: 900, color: '#ef4444' }}>{s.strikes}</div>
-                              <div style={{ fontSize: 10, color: '#64748b' }}>🔥 스트라이크 {s.strikePct}%</div>
+                              <div style={{ fontSize: 10, color: '#64748b' }}>🔥 S {s.strikePct}%{s.fouls > 0 ? ` (파울 ${s.fouls})` : ''}</div>
                             </div>
                             <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '10px', textAlign: 'center' }}>
                               <div style={{ fontSize: 20, fontWeight: 900, color: '#3b82f6' }}>{s.balls}</div>
@@ -223,14 +227,14 @@ export default function StatsPage() {
                                   <div key={r.time + i} style={{
                                     padding: '5px 10px', borderRadius: 20,
                                     background: '#0f172a',
-                                    border: `1px solid ${r.result === 'strike' ? '#ef444444' : r.result === 'ball' ? '#3b82f644' : '#334155'}`,
+                                    border: `1px solid ${r.result === 'strike' ? '#ef444444' : r.result === 'foul' ? '#f59e0b44' : r.result === 'ball' ? '#3b82f644' : '#334155'}`,
                                     fontSize: 12, fontWeight: 700,
-                                    color: r.result === 'strike' ? '#ef4444' : r.result === 'ball' ? '#60a5fa' : '#64748b',
+                                    color: r.result === 'strike' ? '#ef4444' : r.result === 'foul' ? '#f59e0b' : r.result === 'ball' ? '#60a5fa' : '#64748b',
                                     display: 'flex', alignItems: 'center', gap: 5,
                                   }}>
                                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: getColor(pitchIdx >= 0 ? pitchIdx : 0), flexShrink: 0 }} />
                                     {r.pitch}
-                                    {r.result && <span style={{ opacity: 0.6 }}>{r.result === 'strike' ? ' S' : ' B'}</span>}
+                                    {r.result && <span style={{ opacity: 0.6 }}>{r.result === 'strike' ? ' S' : r.result === 'foul' ? ' F' : ' B'}</span>}
                                   </div>
                                 );
                               })}
