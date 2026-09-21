@@ -308,7 +308,7 @@ export default function TeamPage() {
                 {isManager && isEditing && (
                   <div style={{ padding: '16px 18px', borderBottom: '1px solid #0f172a', background: '#0f1e35' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
-                      {([['타석','pa'],['타수','ab'],['안타','h'],['볼넷','bb'],['2루타','d'],['3루타','t'],['홈런','hr'],['사구','hbp'],['타점','rbi'],['득점','r'],['삼진','so']] as [string, keyof BatStats][]).map(([label, key]) => (
+                      {([['타석','pa'],['타수','ab'],['안타','h'],['볼넷','bb'],['2루타','d'],['3루타','t'],['홈런','hr'],['사구','hbp'],['삼진','so']] as [string, keyof BatStats][]).map(([label, key]) => (
                         <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <label style={{ fontSize: 10, color: '#64748b', fontWeight: 700 }}>{label}</label>
                           <input type="number" min="0" value={batForm[key]} onChange={e => bf(key, e.target.value)}
@@ -323,7 +323,7 @@ export default function TeamPage() {
 
                 <div style={{ padding: '14px 18px' }}>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                    {[['타석',s.pa],['타수',s.ab],['안타',s.h],['2루타',s.d],['3루타',s.t],['홈런',s.hr],['볼넷',s.bb],['사구',s.hbp],['타점',s.rbi],['득점',s.r],['삼진',s.so]].map(([label, val]) => (
+                    {[['타석',s.pa],['타수',s.ab],['안타',s.h],['2루타',s.d],['3루타',s.t],['홈런',s.hr],['볼넷',s.bb],['사구',s.hbp],['삼진',s.so]].map(([label, val]) => (
                       <div key={label as string} style={{ background: '#0f172a', borderRadius: 8, padding: '6px 10px', textAlign: 'center', minWidth: 44 }}>
                         <div style={{ fontSize: 15, fontWeight: 900, color: '#f8fafc' }}>{val as number}</div>
                         <div style={{ fontSize: 10, color: '#64748b' }}>{label as string}</div>
