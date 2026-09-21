@@ -106,36 +106,33 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── 코치/선수 & 팀코드 없음: 팀코드 입력 전용 화면 ── */}
+        {/* ── 코치/선수 & 팀코드 없음: 홈 레이아웃 안에 팀코드 입력 카드만 ── */}
         {needTeamCode ? (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 73px)', padding: '0 24px' }}>
-            <div style={{ width: '100%', maxWidth: 360 }}>
-              <div style={{ textAlign: 'center', marginBottom: 28 }}>
-                <div style={{ fontSize: 52, marginBottom: 10 }}>{userRole === 'coach' ? '📋' : '⚾'}</div>
-                <h2 style={{ margin: '0 0 6px', fontSize: 22, fontWeight: 900, color: '#f8fafc' }}>팀에 합류하세요</h2>
-                <p style={{ margin: 0, fontSize: 14, color: '#475569' }}>감독님에게 팀 코드를 받아서 입력하세요</p>
-              </div>
-              <div style={{ background: 'rgba(30,41,59,0.9)', borderRadius: 20, padding: '24px 20px', border: '1px solid #334155' }}>
-                <input
-                  value={newCode}
-                  onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
-                  onKeyDown={e => e.key === 'Enter' && saveCode()}
-                  placeholder="팀 코드 입력"
-                  autoFocus
-                  style={{
-                    width: '100%', padding: '16px', borderRadius: 12, boxSizing: 'border-box',
-                    border: '1.5px solid #334155', background: '#0f172a',
-                    color: '#f8fafc', fontSize: 20, fontWeight: 900, letterSpacing: 2,
-                    textAlign: 'center', marginBottom: 12, transition: 'border-color 0.2s',
-                  }}
-                />
-                {codeError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
-                <button onClick={saveCode} style={{
-                  width: '100%', padding: '15px', borderRadius: 12, border: 'none',
-                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
-                  color: '#fff', fontSize: 16, fontWeight: 900, cursor: 'pointer',
-                }}>합류하기 →</button>
-              </div>
+          <div style={{ padding: '36px 24px', maxWidth: 480, margin: '0 auto' }}>
+            <div style={{ marginBottom: 28 }}>
+              <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>팀 코드 입력</h1>
+              <p style={{ margin: '6px 0 0', fontSize: 13, color: '#475569' }}>감독님께 받은 팀 코드를 입력하면 바로 시작할 수 있어요</p>
+            </div>
+            <div style={{ background: '#1e293b', borderRadius: 20, padding: '24px 20px', border: '1px solid #334155' }}>
+              <input
+                value={newCode}
+                onChange={e => { setNewCode(e.target.value.toUpperCase()); setCodeError(''); }}
+                onKeyDown={e => e.key === 'Enter' && saveCode()}
+                placeholder="팀 코드 입력"
+                autoFocus
+                style={{
+                  width: '100%', padding: '16px', borderRadius: 12, boxSizing: 'border-box',
+                  border: '1.5px solid #334155', background: '#0f172a',
+                  color: '#f8fafc', fontSize: 20, fontWeight: 900, letterSpacing: 2,
+                  textAlign: 'center', marginBottom: 12, transition: 'border-color 0.2s',
+                }}
+              />
+              {codeError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
+              <button onClick={saveCode} style={{
+                width: '100%', padding: '15px', borderRadius: 12, border: 'none',
+                background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                color: '#fff', fontSize: 16, fontWeight: 900, cursor: 'pointer',
+              }}>합류하기 →</button>
             </div>
           </div>
         ) : (
