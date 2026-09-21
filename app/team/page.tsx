@@ -55,8 +55,10 @@ export default function TeamPage() {
   const [batForm, setBatForm] = useState<BatStats>(EMPTY_BAT);
   const [pitForm, setPitForm] = useState<PitStats>(EMPTY_PIT);
   const [lineups, setLineups] = useState<Record<string, string[]>>({});
+  const [lineupPositions, setLineupPositions] = useState<Record<string, string[]>>({});
   const [rotations, setRotations] = useState<Record<string, string[]>>({});
   const [pickingSlot, setPickingSlot] = useState<{ type: 'lineup'|'rotation'; idx: number } | null>(null);
+  const [pickingPos, setPickingPos] = useState<number | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -73,6 +75,7 @@ export default function TeamPage() {
     setAllBat(JSON.parse(localStorage.getItem('pitchcom-bat-stats') || '{}'));
     setAllPit(JSON.parse(localStorage.getItem('pitchcom-pit-stats') || '{}'));
     setLineups(JSON.parse(localStorage.getItem('pitchcom-lineups') || '{}'));
+    setLineupPositions(JSON.parse(localStorage.getItem('pitchcom-lineup-positions') || '{}'));
     setRotations(JSON.parse(localStorage.getItem('pitchcom-rotations') || '{}'));
 
     // Supabase에서 최신 팀 데이터 동기화
@@ -94,6 +97,9 @@ export default function TeamPage() {
         if (rPit) { setAllPit(rPit); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(rPit)); }
         if (rLineups) { setLineups(rLineups); localStorage.setItem('pitchcom-lineups', JSON.stringify(rLineups)); }
         if (rRotations) { setRotations(rRotations); localStorage.setItem('pitchcom-rotations', JSON.stringify(rRotations)); }
+        syncRead(code, 'lineup-positions').then(rPos => {
+          if (rPos) { setLineupPositions(rPos); localStorage.setItem('pitchcom-lineup-positions', JSON.stringify(rPos)); }
+        });
       });
     }
   }, [router]);
@@ -406,9 +412,14 @@ export default function TeamPage() {
       {tab === '타순' && (() => {
         const teamPlayers = currentTeam?.players ?? [];
         const lineup: string[] = lineups[selectedTeam] ?? Array(9).fill('');
+        const positions: string[] = lineupPositions[selectedTeam] ?? Array(9).fill('');
         const saveLineup = (next: string[]) => {
           const n = { ...lineups, [selectedTeam]: next };
           setLineups(n); localStorage.setItem('pitchcom-lineups', JSON.stringify(n)); syncWrite(teamCode, 'lineups', n);
+        };
+        const saveLineupPos = (next: string[]) => {
+          const n = { ...lineupPositions, [selectedTeam]: next };
+          setLineupPositions(n); localStorage.setItem('pitchcom-lineup-positions', JSON.stringify(n)); syncWrite(teamCode, 'lineup-positions', n);
         };
         const assignPlayer = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'lineup') return;
@@ -416,8 +427,13 @@ export default function TeamPage() {
           saveLineup(next); setPickingSlot(null);
         };
         const clearSlot = (idx: number) => {
-          const next = [...lineup]; next[idx] = '';
-          saveLineup(next);
+          const nextL = [...lineup]; nextL[idx] = '';
+          const nextP = [...positions]; nextP[idx] = '';
+          saveLineup(nextL); saveLineupPos(nextP);
+        };
+        const assignPos = (idx: number, pos: string) => {
+          const next = [...positions]; next[idx] = pos;
+          saveLineupPos(next); setPickingPos(null);
         };
         return (
           <>
@@ -436,31 +452,62 @@ export default function TeamPage() {
                   ))}
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: pickingSlot?.type === 'lineup' ? 16 : 0 }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 8 }}>
                   {Array.from({ length: 9 }, (_, i) => {
                     const pid = lineup[i];
                     const player = teamPlayers.find(p => p.id === pid);
                     const isActive = pickingSlot?.type === 'lineup' && pickingSlot.idx === i;
+                    const isPosOpen = pickingPos === i;
+                    const pos = positions[i];
                     return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: 10, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#60a5fa', flexShrink: 0 }}>{i + 1}</div>
-                        <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'lineup', idx: i })} style={{
-                          flex: 1, padding: '12px 16px', borderRadius: 12, border: `2px solid ${isActive ? '#3b82f6' : player ? '#1e293b' : '#334155'}`,
-                          background: isActive ? '#1e3a5f' : player ? '#1e293b' : 'transparent',
-                          color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
-                          display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
-                        }}>
-                          {player ? (
-                            <>
-                              <span style={{ fontSize: 12, color: '#64748b', minWidth: 20 }}>#{player.number || '—'}</span>
-                              <span style={{ fontSize: 15, fontWeight: 700 }}>{player.name}</span>
-                              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>{player.position}</span>
-                            </>
-                          ) : (
-                            <span style={{ fontSize: 13 }}>{isManager ? '탭하여 선수 선택' : '—'}</span>
+                      <div key={i}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <div style={{ width: 32, height: 32, borderRadius: 10, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#60a5fa', flexShrink: 0 }}>{i + 1}</div>
+                          <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'lineup', idx: i })} style={{
+                            flex: 1, padding: '11px 14px', borderRadius: 12, border: `2px solid ${isActive ? '#3b82f6' : player ? '#1e293b' : '#334155'}`,
+                            background: isActive ? '#1e3a5f' : player ? '#1e293b' : 'transparent',
+                            color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
+                            display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+                          }}>
+                            {player ? (
+                              <>
+                                <span style={{ fontSize: 12, color: '#64748b', minWidth: 20 }}>#{player.number || '—'}</span>
+                                <span style={{ fontSize: 15, fontWeight: 700 }}>{player.name}</span>
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 13 }}>{isManager ? '탭하여 선수 선택' : '—'}</span>
+                            )}
+                          </button>
+                          {/* 포지션 선택 버튼 */}
+                          {player && (
+                            <button
+                              onClick={() => isManager && setPickingPos(isPosOpen ? null : i)}
+                              style={{
+                                padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${isPosOpen ? '#3b82f6' : pos ? '#334155' : '#334155'}`,
+                                background: pos ? '#1e293b' : 'transparent',
+                                color: pos ? '#60a5fa' : '#475569',
+                                fontSize: 12, fontWeight: 700, cursor: isManager ? 'pointer' : 'default',
+                                whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                            >
+                              {pos || '포지션'} {isManager && <span style={{ fontSize: 10, opacity: 0.6 }}>▼</span>}
+                            </button>
                           )}
-                        </button>
-                        {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
+                          {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 2px', flexShrink: 0 }}>×</button>}
+                        </div>
+                        {/* 포지션 드롭다운 */}
+                        {isManager && isPosOpen && (
+                          <div style={{ marginTop: 6, marginLeft: 40, background: '#1e293b', borderRadius: 12, border: '1.5px solid #3b82f6', overflow: 'hidden', display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10 }}>
+                            {POSITIONS.map(p => (
+                              <button key={p} onClick={() => assignPos(i, p)} style={{
+                                padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                                background: pos === p ? '#3b82f6' : '#0f172a',
+                                color: pos === p ? '#fff' : '#94a3b8',
+                                fontSize: 12, fontWeight: 700,
+                              }}>{p}</button>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
