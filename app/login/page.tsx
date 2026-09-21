@@ -48,9 +48,10 @@ export default function LoginPage() {
     setLoading(true);
     setTimeout(() => {
       const users = getUsers();
-      const user = users.find(u => u.email === email && u.password === password);
-      if (!user) { setError('이메일 또는 비밀번호가 틀렸어요'); setLoading(false); return; }
-      setSession(user);
+      const userByEmail = users.find(u => u.email === email);
+      if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
+      if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
+      setSession(userByEmail);
       router.push('/');
     }, 300);
   };
@@ -78,7 +79,14 @@ export default function LoginPage() {
     };
     saveUsers([...users, newUser]);
     setSession(newUser);
-    router.push('/');
+    // localStorage 동기 쓰기 완료 확인 후 이동
+    const saved = localStorage.getItem('pitchcom-session');
+    if (saved) {
+      router.push('/');
+    } else {
+      setError('저장 오류가 발생했어요. 다시 시도해주세요.');
+      setLoading(false);
+    }
   };
 
   const inputStyle: React.CSSProperties = {
