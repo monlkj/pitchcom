@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncRead, syncWrite } from '../../lib/teamSync';
 
 const COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 
@@ -28,19 +29,45 @@ export default function SignalPage() {
   const [flash, setFlash] = useState(false);
   const [awaitingResult, setAwaitingResult] = useState(false);
   const [recorded, setRecorded] = useState<'strike'|'ball'|null>(null);
+  const [isManager, setIsManager] = useState(false);
+  const [teamCode, setTeamCode] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
-    const raw = localStorage.getItem('pitchcom-pitchers-v2');
-    if (raw) {
-      const data = JSON.parse(raw) as Pitcher[];
+    const raw = localStorage.getItem('pitchcom-session');
+    if (!raw) return;
+    const session = JSON.parse(raw);
+    const role = session.role ?? '';
+    const code = session.teamCode ?? '';
+    setIsManager(role === 'manager');
+    setTeamCode(code);
+
+    // localStorage 캐시 우선 표시
+    const local = localStorage.getItem('pitchcom-pitchers-v2');
+    if (local) {
+      const data = JSON.parse(local) as Pitcher[];
       setPitchers(data);
       if (data.length > 0) setSelectedId(data[0].id);
+    }
+
+    // Supabase에서 최신 데이터 동기화
+    if (code) {
+      setSyncing(true);
+      syncRead(code, 'pitchers').then(remote => {
+        setSyncing(false);
+        if (remote && Array.isArray(remote) && remote.length > 0) {
+          setPitchers(remote);
+          setSelectedId(remote[0].id);
+          localStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(remote));
+        }
+      });
     }
   }, []);
 
   const save = (next: Pitcher[]) => {
     setPitchers(next);
     localStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(next));
+    if (teamCode) syncWrite(teamCode, 'pitchers', next);
   };
 
   const addPitcher = () => {
@@ -80,7 +107,6 @@ export default function SignalPage() {
     save(next);
   };
 
-  // 사인 전송 — TTS만 재생, 기록 안 함
   const sendSignal = (pitch: string) => {
     speak(pitch);
     setPendingPitch(pitch);
@@ -89,13 +115,11 @@ export default function SignalPage() {
     setTimeout(() => setFlash(false), 500);
   };
 
-  // 투구 완료 — 스트라이크/볼 선택 대기
   const confirmPitch = () => {
     if (!pendingPitch) return;
     setAwaitingResult(true);
   };
 
-  // 스트라이크 or 볼 선택 후 기록
   const recordResult = (result: 'strike' | 'ball') => {
     const raw = localStorage.getItem('pitchcom-stats');
     const stats = raw ? JSON.parse(raw) : [];
@@ -120,7 +144,8 @@ export default function SignalPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>⚡ 신호 전송</h1>
-        {current && (
+        {syncing && <span style={{ fontSize: 11, color: '#3b82f6', marginLeft: 4 }}>동기화 중...</span>}
+        {isManager && current && (
           <button onClick={() => setEditMode(e => !e)} style={{
             marginLeft: 'auto', padding: '7px 14px', borderRadius: 10,
             border: `1.5px solid ${editMode ? '#3b82f6' : '#334155'}`,
@@ -131,22 +156,25 @@ export default function SignalPage() {
             {editMode ? '✅ 완료' : '✏️ 편집'}
           </button>
         )}
+        {!isManager && (
+          <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569', padding: '5px 10px', borderRadius: 8, border: '1px solid #1e293b' }}>읽기 전용</span>
+        )}
       </div>
 
       {/* 투수 드롭다운 */}
       <div style={{ position: 'relative', marginBottom: 14 }}>
-        <button onClick={() => { setDropdownOpen(o => !o); setAddingPitcher(false); }} style={{
+        <button onClick={() => isManager && setDropdownOpen(o => !o)} style={{
           width: '100%', padding: '14px 18px', borderRadius: 14,
           border: `2px solid ${dropdownOpen ? '#3b82f6' : '#1e293b'}`,
           background: '#1e293b', color: '#f8fafc',
-          fontSize: 16, fontWeight: 700, cursor: 'pointer',
+          fontSize: 16, fontWeight: 700, cursor: isManager ? 'pointer' : 'default',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
-          <span>{current?.name || '투수를 선택하세요'}</span>
-          <span style={{ fontSize: 12, color: '#64748b', transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
+          <span>{current?.name || (pitchers.length > 0 ? pitchers[0].name : '투수를 선택하세요')}</span>
+          {isManager && <span style={{ fontSize: 12, color: '#64748b', transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>}
         </button>
 
-        {dropdownOpen && (
+        {dropdownOpen && isManager && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
             background: '#1e293b', borderRadius: 14, border: '1.5px solid #334155',
@@ -183,12 +211,10 @@ export default function SignalPage() {
         )}
       </div>
 
-      {/* 편집 모드 */}
-      {editMode && current && (
+      {/* 편집 모드 (감독만) */}
+      {editMode && isManager && current && (
         <div style={{ background: '#1e293b', borderRadius: 16, padding: '16px', marginBottom: 14 }}>
           <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>{current.name}의 구종</p>
-
-          {/* 기존 구종 목록 */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {current.pitches.map((pitch, i) => (
               <div key={pitch} style={{
@@ -206,8 +232,6 @@ export default function SignalPage() {
               </div>
             ))}
           </div>
-
-          {/* 구종 추가 입력 */}
           <div style={{ display: 'flex', gap: 8 }}>
             <input
               value={newPitchName}
@@ -231,7 +255,6 @@ export default function SignalPage() {
       {/* 사인 상태 + 완료 버튼 */}
       {!editMode && (
         <div style={{ marginBottom: 16 }}>
-          {/* 현재 사인 */}
           <div style={{
             borderRadius: 16, padding: '16px 20px', textAlign: 'center',
             background: flash ? `${pendingColor}22` : '#1e293b',
@@ -259,7 +282,6 @@ export default function SignalPage() {
             )}
           </div>
 
-          {/* 투구 완료 버튼 */}
           {pendingPitch && !awaitingResult && (
             <button onClick={confirmPitch} style={{
               width: '100%', padding: '16px', borderRadius: 14, border: 'none',
@@ -271,7 +293,6 @@ export default function SignalPage() {
             </button>
           )}
 
-          {/* 스트라이크 / 볼 선택 */}
           {awaitingResult && (
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => recordResult('strike')} style={{
@@ -311,7 +332,9 @@ export default function SignalPage() {
         ) : (
           <div style={{ textAlign: 'center', padding: '40px 0', color: '#334155' }}>
             <p style={{ margin: 0, fontSize: 14 }}>
-              {current ? '✏️ 편집 버튼을 눌러 구종을 추가하세요' : '투수를 먼저 선택해주세요'}
+              {current
+                ? (isManager ? '✏️ 편집 버튼을 눌러 구종을 추가하세요' : '감독님이 아직 구종을 설정하지 않았어요')
+                : '투수를 먼저 선택해주세요'}
             </p>
           </div>
         )

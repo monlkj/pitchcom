@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncRead, syncWrite } from '../../lib/teamSync';
 
 interface Player { id: string; name: string; number: string; position: string[]; }
 interface Team { id: string; name: string; players: Player[]; }
@@ -38,6 +39,8 @@ function calcPit(s: PitStats) {
 export default function TeamPage() {
   const router = useRouter();
   const [isManager, setIsManager] = useState(false);
+  const [teamCode, setTeamCode] = useState('');
+  const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState<typeof TABS[number]>('선수 관리');
   const [teams, setTeams] = useState<Team[]>([]);
   const [selectedTeam, setSelectedTeam] = useState('');
@@ -60,6 +63,10 @@ export default function TeamPage() {
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
     setIsManager(session.role === 'manager');
+    const code = session.teamCode ?? '';
+    setTeamCode(code);
+
+    // localStorage 캐시 우선 표시
     const t = JSON.parse(localStorage.getItem('pitchcom-teams') || '[]') as Team[];
     setTeams(t);
     if (t.length > 0) setSelectedTeam(t[0].id);
@@ -67,11 +74,33 @@ export default function TeamPage() {
     setAllPit(JSON.parse(localStorage.getItem('pitchcom-pit-stats') || '{}'));
     setLineups(JSON.parse(localStorage.getItem('pitchcom-lineups') || '{}'));
     setRotations(JSON.parse(localStorage.getItem('pitchcom-rotations') || '{}'));
+
+    // Supabase에서 최신 팀 데이터 동기화
+    if (code) {
+      setSyncing(true);
+      Promise.all([
+        syncRead(code, 'teams'),
+        syncRead(code, 'bat-stats'),
+        syncRead(code, 'pit-stats'),
+        syncRead(code, 'lineups'),
+        syncRead(code, 'rotations'),
+      ]).then(([rTeams, rBat, rPit, rLineups, rRotations]) => {
+        setSyncing(false);
+        if (rTeams && Array.isArray(rTeams) && rTeams.length > 0) {
+          setTeams(rTeams); setSelectedTeam(rTeams[0].id);
+          localStorage.setItem('pitchcom-teams', JSON.stringify(rTeams));
+        }
+        if (rBat) { setAllBat(rBat); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(rBat)); }
+        if (rPit) { setAllPit(rPit); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(rPit)); }
+        if (rLineups) { setLineups(rLineups); localStorage.setItem('pitchcom-lineups', JSON.stringify(rLineups)); }
+        if (rRotations) { setRotations(rRotations); localStorage.setItem('pitchcom-rotations', JSON.stringify(rRotations)); }
+      });
+    }
   }, [router]);
 
-  const saveTeams = (next: Team[]) => { setTeams(next); localStorage.setItem('pitchcom-teams', JSON.stringify(next)); };
-  const saveBat = (next: AllBat) => { setAllBat(next); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); };
-  const savePit = (next: AllPit) => { setAllPit(next); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(next)); };
+  const saveTeams = (next: Team[]) => { setTeams(next); localStorage.setItem('pitchcom-teams', JSON.stringify(next)); syncWrite(teamCode, 'teams', next); };
+  const saveBat = (next: AllBat) => { setAllBat(next); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); syncWrite(teamCode, 'bat-stats', next); };
+  const savePit = (next: AllPit) => { setAllPit(next); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(next)); syncWrite(teamCode, 'pit-stats', next); };
 
   const addTeam = () => {
     const name = newTeamName.trim(); if (!name) return;
@@ -110,7 +139,8 @@ export default function TeamPage() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>👥 팀/선수 관리</h1>
-        {!isManager && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}
+        {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
+        {!isManager && !syncing && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}
       </div>
 
       <div style={{ display: 'flex', background: '#1e293b', borderRadius: 14, padding: 4, marginBottom: 20, gap: 3, flexWrap: 'wrap' }}>
@@ -378,7 +408,7 @@ export default function TeamPage() {
         const lineup: string[] = lineups[selectedTeam] ?? Array(9).fill('');
         const saveLineup = (next: string[]) => {
           const n = { ...lineups, [selectedTeam]: next };
-          setLineups(n); localStorage.setItem('pitchcom-lineups', JSON.stringify(n));
+          setLineups(n); localStorage.setItem('pitchcom-lineups', JSON.stringify(n)); syncWrite(teamCode, 'lineups', n);
         };
         const assignPlayer = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'lineup') return;
@@ -473,7 +503,7 @@ export default function TeamPage() {
         const rotation: string[] = rotations[selectedTeam] ?? Array(6).fill('');
         const saveRotation = (next: string[]) => {
           const n = { ...rotations, [selectedTeam]: next };
-          setRotations(n); localStorage.setItem('pitchcom-rotations', JSON.stringify(n));
+          setRotations(n); localStorage.setItem('pitchcom-rotations', JSON.stringify(n)); syncWrite(teamCode, 'rotations', n);
         };
         const assignPitcher = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'rotation') return;
