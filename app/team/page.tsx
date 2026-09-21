@@ -394,11 +394,12 @@ export default function TeamPage() {
                     ))}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                    {([['ERA','평균자책점',fmt2(c.era),'#ef4444'],['K-BB/9','삼진-볼넷/9',fmt2(c.kbb),'#22c55e'],['WHIP','이닝당출루',fmt2(c.whip),'#f97316'],['K/9','탈삼진/9',fmt2(c.kper9),'#60a5fa'],['(BB+HBP)/9','볼넷+사구/9',fmt2(c.bbhbpPerIp),'#a78bfa']] as [string,string,string,string][]).map(([label, korean, val, color]) => (
+                    {([['ERA','평균자책점',fmt2(c.era),'#ef4444',''],['K-BB/9','삼진-볼넷/9',fmt2(c.kbb),'#22c55e','삼진↑볼넷↓ 지배력'],['WHIP','이닝당출루',fmt2(c.whip),'#f97316',''],['K/9','탈삼진/9',fmt2(c.kper9),'#60a5fa',''],['(BB+HBP)/9','볼넷+사구/9',fmt2(c.bbhbpPerIp),'#a78bfa','공짜 출루 허용']] as [string,string,string,string,string][]).map(([label, korean, val, color, desc]) => (
                       <div key={label} style={{ background: '#0f172a', borderRadius: 10, padding: '12px 4px', textAlign: 'center' }}>
                         <div style={{ fontSize: 20, fontWeight: 900, color }}>{val}</div>
                         <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1, fontWeight: 700 }}>{label}</div>
                         <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{korean}</div>
+                        {desc && <div style={{ fontSize: 8, color: '#334155', marginTop: 2, lineHeight: 1.3 }}>{desc}</div>}
                       </div>
                     ))}
                   </div>
