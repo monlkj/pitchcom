@@ -49,6 +49,7 @@ export default function StatsPage() {
   const [syncing, setSyncing] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [isManager, setIsManager] = useState(false);
+  const [selectedPitcher, setSelectedPitcher] = useState<string | null>(null);
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -83,8 +84,9 @@ export default function StatsPage() {
     syncWrite(teamCode, 'pitch-stats', []);
   };
 
-  const pitcherNames = Array.from(new Set(records.map(r => r.pitcher || '(이름 없음')));
-  const overall = calcStats(records);
+  const pitcherNames = Array.from(new Set(records.map(r => r.pitcher || '(이름 없음)')));
+  const filteredRecords = selectedPitcher ? records.filter(r => (r.pitcher || '(이름 없음)') === selectedPitcher) : records;
+  const overall = calcStats(filteredRecords);
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 480, margin: '0 auto' }}>
@@ -105,13 +107,40 @@ export default function StatsPage() {
         </div>
       ) : (
         <>
-          {/* ── 전체 요약 ── */}
+          {/* ── 선수 필터 칩 ── */}
+          {pitcherNames.length > 1 && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+              <button
+                onClick={() => setSelectedPitcher(null)}
+                style={{
+                  padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                  background: selectedPitcher === null ? '#3b82f6' : '#1e293b',
+                  color: selectedPitcher === null ? '#fff' : '#94a3b8',
+                }}
+              >전체</button>
+              {pitcherNames.map(name => (
+                <button
+                  key={name}
+                  onClick={() => setSelectedPitcher(selectedPitcher === name ? null : name)}
+                  style={{
+                    padding: '7px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 700,
+                    background: selectedPitcher === name ? '#3b82f6' : '#1e293b',
+                    color: selectedPitcher === name ? '#fff' : '#94a3b8',
+                  }}
+                >{name}</button>
+              ))}
+            </div>
+          )}
+
+          {/* ── 전체/선택 요약 ── */}
           <div style={{ background: '#1e293b', borderRadius: 16, padding: '18px 20px', marginBottom: 20 }}>
-            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#475569', fontWeight: 700 }}>전체 요약</p>
+            <p style={{ margin: '0 0 14px', fontSize: 12, color: '#475569', fontWeight: 700 }}>
+              {selectedPitcher ? `${selectedPitcher} 요약` : '전체 요약'}
+            </p>
             <div style={{ display: 'flex', gap: 0 }}>
               {[
                 ['총 투구', overall.total, '#f8fafc'],
-                ['투수', pitcherNames.length, '#60a5fa'],
+                ['투수', selectedPitcher ? 1 : pitcherNames.length, '#60a5fa'],
                 ['구종', overall.pitches.length, '#a78bfa'],
               ].map(([label, val, color], i, arr) => (
                 <div key={label as string} style={{ flex: 1, textAlign: 'center', borderRight: i < arr.length - 1 ? '1px solid #334155' : 'none' }}>
@@ -135,12 +164,12 @@ export default function StatsPage() {
           </div>
 
           {/* ── 선수별 카드 ── */}
-          <p style={{ margin: '0 0 12px', fontSize: 12, color: '#475569', fontWeight: 700 }}>선수별 통계</p>
+          {!selectedPitcher && <p style={{ margin: '0 0 12px', fontSize: 12, color: '#475569', fontWeight: 700 }}>선수별 통계</p>}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {pitcherNames.map(name => {
+            {(selectedPitcher ? [selectedPitcher] : pitcherNames).map(name => {
               const recs = records.filter(r => (r.pitcher || '(이름 없음)') === name);
               const s = calcStats(recs);
-              const isOpen = expandedPitcher === name;
+              const isOpen = expandedPitcher === name || selectedPitcher === name;
               return (
                 <div key={name} style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', border: isOpen ? '1.5px solid #3b82f644' : '1.5px solid transparent' }}>
                   {/* 카드 헤더 */}
