@@ -164,18 +164,18 @@ export default function SignalPage() {
 
       {/* 투수 드롭다운 */}
       <div style={{ position: 'relative', marginBottom: 14 }}>
-        <button onClick={() => isManager && setDropdownOpen(o => !o)} style={{
+        <button onClick={() => setDropdownOpen(o => !o)} style={{
           width: '100%', padding: '14px 18px', borderRadius: 14,
           border: `2px solid ${dropdownOpen ? '#3b82f6' : '#1e293b'}`,
           background: '#1e293b', color: '#f8fafc',
-          fontSize: 16, fontWeight: 700, cursor: isManager ? 'pointer' : 'default',
+          fontSize: 16, fontWeight: 700, cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         }}>
           <span>{current?.name || (pitchers.length > 0 ? pitchers[0].name : '투수를 선택하세요')}</span>
-          {isManager && <span style={{ fontSize: 12, color: '#64748b', transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>}
+          <span style={{ fontSize: 12, color: '#64748b', transform: dropdownOpen ? 'rotate(180deg)' : 'none', transition: '0.2s' }}>▼</span>
         </button>
 
-        {dropdownOpen && isManager && (
+        {dropdownOpen && (
           <div style={{
             position: 'absolute', top: 'calc(100% + 6px)', left: 0, right: 0,
             background: '#1e293b', borderRadius: 14, border: '1.5px solid #334155',
@@ -192,11 +192,13 @@ export default function SignalPage() {
                   <div style={{ fontSize: 15, fontWeight: 700 }}>{p.name}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{p.pitches.join(' · ') || '구종 없음'}</div>
                 </div>
-                <button onClick={e => { e.stopPropagation(); removePitcher(p.id); }}
-                  style={{ background: '#334155', border: 'none', color: '#94a3b8', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13 }}>×</button>
+                {isManager && (
+                  <button onClick={e => { e.stopPropagation(); removePitcher(p.id); }}
+                    style={{ background: '#334155', border: 'none', color: '#94a3b8', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13 }}>×</button>
+                )}
               </div>
             ))}
-            {addingPitcher ? (
+            {isManager && (addingPitcher ? (
               <div style={{ padding: '10px 12px', display: 'flex', gap: 8 }}>
                 <input autoFocus value={newPitcherName} onChange={e => setNewPitcherName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addPitcher()}
@@ -207,7 +209,7 @@ export default function SignalPage() {
             ) : (
               <div onClick={() => setAddingPitcher(true)}
                 style={{ padding: '13px 18px', cursor: 'pointer', color: '#60a5fa', fontSize: 14, fontWeight: 700 }}>+ 투수 추가</div>
-            )}
+            ))}
           </div>
         )}
       </div>

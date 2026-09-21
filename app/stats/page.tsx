@@ -44,11 +44,14 @@ export default function StatsPage() {
   const [expandedPitcher, setExpandedPitcher] = useState<string | null>(null);
   const [syncing, setSyncing] = useState(false);
   const [teamCode, setTeamCode] = useState('');
+  const [isManager, setIsManager] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
-    const code = raw ? (JSON.parse(raw).teamCode ?? '') : '';
+    const session = raw ? JSON.parse(raw) : {};
+    const code = session.teamCode ?? '';
     setTeamCode(code);
+    setIsManager(session.role === 'manager');
 
     // localStorage 캐시 우선 표시
     try {
@@ -85,7 +88,7 @@ export default function StatsPage() {
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>📊 투구 통계</h1>
         {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
-        {records.length > 0 && (
+        {isManager && records.length > 0 && (
           <button onClick={clearStats} style={{ marginLeft: 'auto', padding: '6px 12px', borderRadius: 8, border: '1px solid #dc2626', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>초기화</button>
         )}
       </div>
