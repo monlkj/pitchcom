@@ -394,10 +394,11 @@ export default function TeamPage() {
                     ))}
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
-                    {[['ERA',fmt2(c.era),'#ef4444'],['K-BB/9',fmt2(c.kbb),'#22c55e'],['WHIP',fmt2(c.whip),'#f97316'],['K/9',fmt2(c.kper9),'#60a5fa'],['(BB+HBP)/9',fmt2(c.bbhbpPerIp),'#a78bfa']].map(([label, val, color]) => (
-                      <div key={label as string} style={{ background: '#0f172a', borderRadius: 10, padding: '12px 6px', textAlign: 'center' }}>
-                        <div style={{ fontSize: 22, fontWeight: 900, color: color as string }}>{val as string}</div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{label as string}</div>
+                    {([['ERA','평균자책점',fmt2(c.era),'#ef4444'],['K-BB/9','삼진-볼넷/9',fmt2(c.kbb),'#22c55e'],['WHIP','이닝당출루',fmt2(c.whip),'#f97316'],['K/9','탈삼진/9',fmt2(c.kper9),'#60a5fa'],['(BB+HBP)/9','볼넷+사구/9',fmt2(c.bbhbpPerIp),'#a78bfa']] as [string,string,string,string][]).map(([label, korean, val, color]) => (
+                      <div key={label} style={{ background: '#0f172a', borderRadius: 10, padding: '12px 4px', textAlign: 'center' }}>
+                        <div style={{ fontSize: 20, fontWeight: 900, color }}>{val}</div>
+                        <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 1, fontWeight: 700 }}>{label}</div>
+                        <div style={{ fontSize: 9, color: '#475569', marginTop: 1 }}>{korean}</div>
                       </div>
                     ))}
                   </div>
@@ -496,18 +497,22 @@ export default function TeamPage() {
                           {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 2px', flexShrink: 0 }}>×</button>}
                         </div>
                         {/* 포지션 드롭다운 */}
-                        {isManager && isPosOpen && (
-                          <div style={{ marginTop: 6, marginLeft: 40, background: '#1e293b', borderRadius: 12, border: '1.5px solid #3b82f6', overflow: 'hidden', display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10 }}>
-                            {POSITIONS.map(p => (
-                              <button key={p} onClick={() => assignPos(i, p)} style={{
-                                padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
-                                background: pos === p ? '#3b82f6' : '#0f172a',
-                                color: pos === p ? '#fff' : '#94a3b8',
-                                fontSize: 12, fontWeight: 700,
-                              }}>{p}</button>
-                            ))}
-                          </div>
-                        )}
+                        {isManager && isPosOpen && (() => {
+                          const playerPositions = player ? (Array.isArray(player.position) ? player.position : [player.position]).filter(Boolean) : [];
+                          const posOptions = playerPositions.length > 0 ? playerPositions : POSITIONS;
+                          return (
+                            <div style={{ marginTop: 6, marginLeft: 40, background: '#1e293b', borderRadius: 12, border: '1.5px solid #3b82f6', overflow: 'hidden', display: 'flex', flexWrap: 'wrap', gap: 6, padding: 10 }}>
+                              {posOptions.map(p => (
+                                <button key={p} onClick={() => assignPos(i, p)} style={{
+                                  padding: '6px 12px', borderRadius: 20, border: 'none', cursor: 'pointer',
+                                  background: pos === p ? '#3b82f6' : '#0f172a',
+                                  color: pos === p ? '#fff' : '#94a3b8',
+                                  fontSize: 12, fontWeight: 700,
+                                }}>{p}</button>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                     );
                   })}
