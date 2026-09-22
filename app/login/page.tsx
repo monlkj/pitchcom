@@ -2,6 +2,19 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncRead, syncWrite } from '../../lib/teamSync';
+
+const GLOBAL = '__global__';
+
+async function getUsersFromCloud(): Promise<LocalUser[]> {
+  try {
+    const data = await syncRead(GLOBAL, 'users');
+    return Array.isArray(data) ? data : [];
+  } catch { return []; }
+}
+async function saveUsersToCloud(users: LocalUser[]): Promise<void> {
+  await syncWrite(GLOBAL, 'users', users);
+}
 
 type Role = 'manager' | 'coach' | 'player';
 
@@ -42,31 +55,53 @@ export default function LoginPage() {
 
   const resetSignup = () => { setStep('info'); setError(''); };
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     setError('');
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true);
-    setTimeout(() => {
-      const users = getUsers();
-      const userByEmail = users.find(u => u.email === email);
-      if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
-      if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
-      setSession(userByEmail);
-      router.push('/');
-    }, 300);
+    let users = getUsers();
+    let userByEmail = users.find(u => u.email === email);
+    if (!userByEmail) {
+      // 로컬에 없으면 Supabase에서 조회
+      const cloudUsers = await getUsersFromCloud();
+      if (cloudUsers.length > 0) {
+        // 클라우드 유저를 로컬에 병합 저장
+        const merged = [...users];
+        for (const cu of cloudUsers) {
+          if (!merged.find(u => u.email === cu.email)) merged.push(cu);
+        }
+        saveUsers(merged);
+        userByEmail = cloudUsers.find(u => u.email === email) ?? null;
+      }
+    }
+    if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
+    if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
+    setSession(userByEmail);
+    router.push('/');
   };
 
-  const handleSignupInfo = () => {
+  const handleSignupInfo = async () => {
     setError('');
     if (!name.trim()) { setError('이름을 입력해주세요'); return; }
     if (!email.trim()) { setError('이메일을 입력해주세요'); return; }
     if (password.length < 4) { setError('비밀번호는 4자 이상이에요'); return; }
-    const users = getUsers();
-    if (users.find(u => u.email === email)) { setError('이미 사용 중인 이메일이에요'); return; }
+    setLoading(true);
+    const localUsers = getUsers();
+    if (localUsers.find(u => u.email === email)) { setError('이미 사용 중인 이메일이에요'); setLoading(false); return; }
+    // 클라우드에서도 중복 확인
+    const cloudUsers = await getUsersFromCloud();
+    if (cloudUsers.find(u => u.email === email)) {
+      // 클라우드 유저 로컬 병합
+      const merged = [...localUsers];
+      for (const cu of cloudUsers) { if (!merged.find(u => u.email === cu.email)) merged.push(cu); }
+      saveUsers(merged);
+      setError('이미 사용 중인 이메일이에요'); setLoading(false); return;
+    }
+    setLoading(false);
     setStep('role');
   };
 
-  const handleRoleSelect = (r: Role) => {
+  const handleRoleSelect = async (r: Role) => {
     setLoading(true);
     const users = getUsers();
     const newUser: LocalUser = {
@@ -77,9 +112,11 @@ export default function LoginPage() {
       role: r,
       teamCode: '',
     };
-    saveUsers([...users, newUser]);
+    const nextUsers = [...users, newUser];
+    saveUsers(nextUsers);
     setSession(newUser);
-    // localStorage 동기 쓰기 완료 확인 후 이동
+    // Supabase에도 저장 (다른 기기 로그인 지원)
+    await saveUsersToCloud(nextUsers);
     const saved = localStorage.getItem('pitchcom-session');
     if (saved) {
       router.push('/');
