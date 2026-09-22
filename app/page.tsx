@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncRead, syncWrite } from '../lib/teamSync';
 
 const MENUS = [
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
@@ -55,7 +56,6 @@ export default function Home() {
       let managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
       if (!managerExists) {
         // 로컬에 없으면 클라우드 확인
-        const { syncRead } = await import('../lib/teamSync');
         const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
         if (cloudUsers.length > 0) {
           // 클라우드 유저 로컬 병합
@@ -80,7 +80,6 @@ export default function Home() {
     const updated = users.map((u: any) => u.id === session.id ? { ...u, teamCode: code } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     // 클라우드에도 반영
-    const { syncWrite } = await import('../lib/teamSync');
     syncWrite('__global__', 'users', updated);
     setTeamCode(code);
     setEditingCode(false);
