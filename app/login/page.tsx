@@ -59,8 +59,8 @@ export default function LoginPage() {
     setError('');
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true);
-    let users = getUsers();
-    let userByEmail = users.find(u => u.email === email);
+    const users = getUsers();
+    let userByEmail: LocalUser | undefined = users.find(u => u.email === email);
     if (!userByEmail) {
       // 로컬에 없으면 Supabase에서 조회
       const cloudUsers = await getUsersFromCloud();
@@ -71,7 +71,7 @@ export default function LoginPage() {
           if (!merged.find(u => u.email === cu.email)) merged.push(cu);
         }
         saveUsers(merged);
-        userByEmail = cloudUsers.find(u => u.email === email) ?? null;
+        userByEmail = cloudUsers.find(u => u.email === email);
       }
     }
     if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
