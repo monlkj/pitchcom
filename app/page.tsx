@@ -81,6 +81,9 @@ export default function Home() {
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     // 클라우드에도 반영
     syncWrite('__global__', 'users', updated);
+    // 세션에서 이름/역할 명시적 갱신 (이전 상태 잔류 방지)
+    setUserName(session.name ?? '');
+    setUserRole(session.role ?? '');
     setTeamCode(code);
     setEditingCode(false);
     setNewCode('');
