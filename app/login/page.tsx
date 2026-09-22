@@ -115,8 +115,14 @@ export default function LoginPage() {
     const nextUsers = [...users, newUser];
     saveUsers(nextUsers);
     setSession(newUser);
-    // Supabase에도 저장 (다른 기기 로그인 지원)
-    await saveUsersToCloud(nextUsers);
+    // 클라우드 기존 데이터와 병합 후 저장 (덮어쓰지 않음)
+    const cloudUsers = await getUsersFromCloud();
+    const merged = [...cloudUsers];
+    for (const u of nextUsers) {
+      const idx = merged.findIndex(cu => cu.email === u.email);
+      if (idx >= 0) merged[idx] = u; else merged.push(u);
+    }
+    await saveUsersToCloud(merged);
     const saved = localStorage.getItem('pitchcom-session');
     if (saved) {
       router.push('/');

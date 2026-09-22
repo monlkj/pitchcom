@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { syncWrite } from '../../lib/teamSync';
 
 interface Member {
   id: string;
@@ -46,6 +47,7 @@ export default function AdminPage() {
     const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const updated = users.map(u => u.id === member.id ? { ...u, teamCode: '' } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+    syncWrite('__global__', 'users', updated);
     loadMembers(teamCode);
   };
 
@@ -53,7 +55,9 @@ export default function AdminPage() {
     if (member.id === myId) return;
     if (!confirm(`${member.name}님의 계정을 삭제할까요?\n이 작업은 되돌릴 수 없어요.`)) return;
     const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    localStorage.setItem('pitchcom-users', JSON.stringify(users.filter(u => u.id !== member.id)));
+    const updated = users.filter(u => u.id !== member.id);
+    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+    syncWrite('__global__', 'users', updated);
     loadMembers(teamCode);
   };
 
