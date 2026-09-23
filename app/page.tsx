@@ -50,22 +50,17 @@ export default function Home() {
   const saveCode = async () => {
     const code = newCode.trim().toUpperCase();
     if (!code) { setCodeError('팀 코드를 입력해주세요'); return; }
+
+    // 항상 클라우드와 병합 (현재 유저가 로컬에 없을 수 있음)
     let users: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
+    for (const cu of cloudUsers) {
+      if (!users.find((u: any) => u.email === cu.email)) users.push(cu);
+    }
+    localStorage.setItem('pitchcom-users', JSON.stringify(users));
 
     if (userRole === 'coach' || userRole === 'player') {
-      let managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
-      if (!managerExists) {
-        // 로컬에 없으면 클라우드 확인
-        const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
-        if (cloudUsers.length > 0) {
-          // 클라우드 유저 로컬 병합
-          const merged = [...users];
-          for (const cu of cloudUsers) { if (!merged.find((u: any) => u.email === cu.email)) merged.push(cu); }
-          localStorage.setItem('pitchcom-users', JSON.stringify(merged));
-          users = merged;
-          managerExists = merged.find((u: any) => u.teamCode === code && u.role === 'manager');
-        }
-      }
+      const managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
       if (!managerExists) { setCodeError('존재하지 않는 팀 코드예요'); return; }
     }
     if (userRole === 'manager' && !teamCode) {
@@ -80,7 +75,7 @@ export default function Home() {
     const updated = users.map((u: any) => u.id === session.id ? { ...u, teamCode: code } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     // 클라우드에도 반영
-    syncWrite('__global__', 'users', updated);
+    await syncWrite('__global__', 'users', updated);
     // 세션에서 이름/역할 명시적 갱신 (이전 상태 잔류 방지)
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
