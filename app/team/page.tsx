@@ -480,7 +480,17 @@ export default function TeamPage() {
                       <div key={i}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 32, height: 32, borderRadius: 10, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#60a5fa', flexShrink: 0 }}>{i + 1}</div>
-                          <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'lineup', idx: i })} style={{
+                          <button onClick={() => {
+                            if (!isManager) return;
+                            if (pickingSlot?.type === 'lineup' && pickingSlot.idx !== i && pid) {
+                              const next = [...lineup];
+                              next[i] = next[pickingSlot.idx];
+                              next[pickingSlot.idx] = pid;
+                              saveLineup(next); setPickingSlot(null);
+                            } else {
+                              setPickingSlot(isActive ? null : { type: 'lineup', idx: i });
+                            }
+                          }} style={{
                             flex: 1, padding: '11px 14px', borderRadius: 12, border: `2px solid ${isActive ? '#3b82f6' : player ? '#1e293b' : '#334155'}`,
                             background: isActive ? '#1e3a5f' : player ? '#1e293b' : 'transparent',
                             color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
