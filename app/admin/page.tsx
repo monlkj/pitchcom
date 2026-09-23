@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { syncWrite } from '../../lib/teamSync';
+import { syncRead, syncWrite } from '../../lib/teamSync';
 
 interface Member {
   id: string;
@@ -25,9 +25,16 @@ export default function AdminPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [ready, setReady] = useState(false);
 
-  const loadMembers = (code: string) => {
-    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    setMembers(users.filter(u => u.teamCode === code));
+  const loadMembers = async (code: string) => {
+    // 로컬 + 클라우드 병합 후 해당 팀 코드 필터
+    const local: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    const cloud: Member[] = (await syncRead('__global__', 'users')) ?? [];
+    const merged: Member[] = [...local];
+    for (const cu of cloud) {
+      if (!merged.find(u => u.email === cu.email)) merged.push(cu);
+    }
+    localStorage.setItem('pitchcom-users', JSON.stringify(merged));
+    setMembers(merged.filter(u => u.teamCode === code));
   };
 
   useEffect(() => {
