@@ -135,7 +135,8 @@ export default function TeamPage() {
     saveTeams(teams.map(t => t.id === selectedTeam ? { ...t, players: t.players.filter(p => p.id !== pid) } : t));
   };
   const currentTeam = teams.find(t => t.id === selectedTeam);
-  const allPlayers = teams.flatMap(t => t.players.map(p => ({ ...p, teamName: t.name })));
+  const sortKo = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ko');
+  const allPlayers = teams.flatMap(t => [...t.players].sort(sortKo).map(p => ({ ...p, teamName: t.name })));
 
   const bf = (k: keyof BatStats, v: string) => setBatForm(f => ({ ...f, [k]: Math.max(0, parseInt(v) || 0) }));
   const pf = (k: keyof PitStats, v: string) => setPitForm(f => ({ ...f, [k]: k === 'ip' ? Math.max(0, parseFloat(v) || 0) : Math.max(0, parseInt(v) || 0) }));
@@ -224,7 +225,7 @@ export default function TeamPage() {
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{isManager ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
               ) : (
                 <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
-                  {currentTeam.players.map((p, i) => {
+                  {[...currentTeam.players].sort(sortKo).map((p, i) => {
                     const isInlineEditing = editingPlayer?.id === p.id;
                     return (
                       <div key={p.id} style={{ borderBottom: i < currentTeam.players.length - 1 ? '1px solid #0f172a' : 'none' }}>
@@ -431,7 +432,15 @@ export default function TeamPage() {
         };
         const assignPlayer = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'lineup') return;
-          const next = [...lineup]; next[pickingSlot.idx] = pid;
+          const next = [...lineup];
+          const existingIdx = next.indexOf(pid);
+          if (existingIdx >= 0) {
+            // 이미 배치된 선수면 맞교대
+            next[existingIdx] = next[pickingSlot.idx];
+            next[pickingSlot.idx] = pid;
+          } else {
+            next[pickingSlot.idx] = pid;
+          }
           saveLineup(next); setPickingSlot(null);
         };
         const clearSlot = (idx: number) => {

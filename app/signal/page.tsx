@@ -30,6 +30,7 @@ export default function SignalPage() {
   const [awaitingResult, setAwaitingResult] = useState(false);
   const [recorded, setRecorded] = useState<'strike'|'ball'|'foul'|null>(null);
   const [isManager, setIsManager] = useState(false);
+  const [isCoach, setIsCoach] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [syncing, setSyncing] = useState(false);
 
@@ -40,6 +41,7 @@ export default function SignalPage() {
     const role = session.role ?? '';
     const code = session.teamCode ?? '';
     setIsManager(role === 'manager');
+    setIsCoach(role === 'coach');
     setTeamCode(code);
 
     // localStorage 캐시 우선 표시
@@ -146,7 +148,7 @@ export default function SignalPage() {
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>⚡ 신호 전송</h1>
         {syncing && <span style={{ fontSize: 11, color: '#3b82f6', marginLeft: 4 }}>동기화 중...</span>}
-        {isManager && current && (
+        {(isManager || isCoach) && current && (
           <button onClick={() => setEditMode(e => !e)} style={{
             marginLeft: 'auto', padding: '7px 14px', borderRadius: 10,
             border: `1.5px solid ${editMode ? '#3b82f6' : '#334155'}`,
@@ -157,7 +159,7 @@ export default function SignalPage() {
             {editMode ? '✅ 완료' : '✏️ 편집'}
           </button>
         )}
-        {!isManager && (
+        {!isManager && !isCoach && (
           <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569', padding: '5px 10px', borderRadius: 8, border: '1px solid #1e293b' }}>읽기 전용</span>
         )}
       </div>
@@ -192,13 +194,13 @@ export default function SignalPage() {
                   <div style={{ fontSize: 15, fontWeight: 700 }}>{p.name}</div>
                   <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{p.pitches.join(' · ') || '구종 없음'}</div>
                 </div>
-                {isManager && (
+                {(isManager || isCoach) && (
                   <button onClick={e => { e.stopPropagation(); removePitcher(p.id); }}
                     style={{ background: '#334155', border: 'none', color: '#94a3b8', borderRadius: '50%', width: 22, height: 22, cursor: 'pointer', fontSize: 13 }}>×</button>
                 )}
               </div>
             ))}
-            {isManager && (addingPitcher ? (
+            {(isManager || isCoach) && (addingPitcher ? (
               <div style={{ padding: '10px 12px', display: 'flex', gap: 8 }}>
                 <input autoFocus value={newPitcherName} onChange={e => setNewPitcherName(e.target.value)}
                   onKeyDown={e => e.key === 'Enter' && addPitcher()}
@@ -214,8 +216,8 @@ export default function SignalPage() {
         )}
       </div>
 
-      {/* 편집 모드 (감독만) */}
-      {editMode && isManager && current && (
+      {/* 편집 모드 (감독/코치) */}
+      {editMode && (isManager || isCoach) && current && (
         <div style={{ background: '#1e293b', borderRadius: 16, padding: '16px', marginBottom: 14 }}>
           <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>{current.name}의 구종</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
