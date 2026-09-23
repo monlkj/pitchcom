@@ -39,6 +39,7 @@ function calcPit(s: PitStats) {
 export default function TeamPage() {
   const router = useRouter();
   const [isManager, setIsManager] = useState(false);
+  const [isCoach, setIsCoach] = useState(false);
   const [teamCode, setTeamCode] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [tab, setTab] = useState<typeof TABS[number]>('선수 관리');
@@ -65,6 +66,7 @@ export default function TeamPage() {
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
     setIsManager(session.role === 'manager');
+    setIsCoach(session.role === 'coach');
     const code = session.teamCode ?? '';
     setTeamCode(code);
 
@@ -147,7 +149,7 @@ export default function TeamPage() {
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>👥 팀/선수 관리</h1>
         {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
-        {!isManager && !syncing && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}
+        {!isManager && !isCoach && !syncing && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}
       </div>
 
       <div style={{ display: 'flex', background: '#1e293b', borderRadius: 14, padding: 4, marginBottom: 20, gap: 3, flexWrap: 'wrap' }}>
@@ -193,13 +195,13 @@ export default function TeamPage() {
             <>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <span style={{ fontSize: 13, color: '#64748b', fontWeight: 700 }}>선수 {currentTeam.players.length}명</span>
-                {isManager && (
+                {(isManager || isCoach) && (
                   <button onClick={() => { setAddingPlayer(true); setEditingPlayer(null); setPlayerForm({ name: '', number: '', position: [] }); }}
                     style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 선수 추가</button>
                 )}
               </div>
 
-              {isManager && addingPlayer && (
+              {(isManager || isCoach) && addingPlayer && (
                 <div style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 14, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <input value={playerForm.number} onChange={e => setPlayerForm(f => ({ ...f, number: e.target.value }))} placeholder="번호"
@@ -222,7 +224,7 @@ export default function TeamPage() {
 
 
               {currentTeam.players.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{isManager ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
+                <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{(isManager || isCoach) ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
               ) : (
                 <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
                   {[...currentTeam.players].sort(sortKo).map((p, i) => {
@@ -235,7 +237,7 @@ export default function TeamPage() {
                             <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{p.name}</div>
                             <div style={{ fontSize: 12, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')}</div>
                           </div>
-                          {isManager && (
+                          {(isManager || isCoach) && (
                             <>
                               <button onClick={() => {
                                 if (isInlineEditing) { setEditingPlayer(null); }
@@ -245,7 +247,7 @@ export default function TeamPage() {
                             </>
                           )}
                         </div>
-                        {isManager && isInlineEditing && (
+                        {(isManager || isCoach) && isInlineEditing && (
                           <div style={{ background: '#1e3a5f', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
                             <div style={{ display: 'flex', gap: 8 }}>
                               <input value={playerForm.number} onChange={e => setPlayerForm(f => ({ ...f, number: e.target.value }))} placeholder="번호"
@@ -272,7 +274,7 @@ export default function TeamPage() {
               )}
             </>
           ) : (
-            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}><p>{isManager ? '팀을 먼저 추가해주세요' : '등록된 팀이 없어요'}</p></div>
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}><p>{isManager ? '팀을 먼저 추가해주세요' : (isCoach ? '감독이 팀을 추가하면 여기에 표시돼요' : '등록된 팀이 없어요')}</p></div>
           )}
         </>
       )}
@@ -297,7 +299,7 @@ export default function TeamPage() {
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
                   </div>
-                  {isManager && (
+                  {(isManager || isCoach) && (
                     <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setBatForm(allBat[p.id] ?? { ...EMPTY_BAT }); } }} style={{
                       padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#3b82f6'}`,
                       background: isEditing ? 'transparent' : '#1e3a5f', color: isEditing ? '#64748b' : '#60a5fa',
@@ -306,7 +308,7 @@ export default function TeamPage() {
                   )}
                 </div>
 
-                {isManager && isEditing && (
+                {(isManager || isCoach) && isEditing && (
                   <div style={{ padding: '16px 18px', borderBottom: '1px solid #0f172a', background: '#0f1e35' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 12 }}>
                       {([['타석','pa'],['타수','ab'],['안타','h'],['볼넷','bb'],['2루타','d'],['3루타','t'],['홈런','hr'],['사구','hbp'],['삼진','so']] as [string, keyof BatStats][]).map(([label, key]) => (
@@ -366,7 +368,7 @@ export default function TeamPage() {
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
                     <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
                   </div>
-                  {isManager && (
+                  {(isManager || isCoach) && (
                     <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setPitForm(allPit[p.id] ?? { ...EMPTY_PIT }); } }} style={{
                       padding: '7px 14px', borderRadius: 9, border: `1px solid ${isEditing ? '#334155' : '#f97316'}`,
                       background: isEditing ? 'transparent' : '#1c1107', color: isEditing ? '#64748b' : '#fb923c',
@@ -375,7 +377,7 @@ export default function TeamPage() {
                   )}
                 </div>
 
-                {isManager && isEditing && (
+                {(isManager || isCoach) && isEditing && (
                   <div style={{ padding: '16px 18px', borderBottom: '1px solid #0f172a', background: '#0f1e35' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 12 }}>
                       {([['이닝(IP)','ip'],['피안타','ha'],['자책점','er'],['볼넷','bb'],['탈삼진','k'],['사구','hbp'],['피홈런','hr']] as [string, keyof PitStats][]).map(([label, key]) => (
