@@ -19,6 +19,7 @@ interface Poll {
   id: string;
   authorId: string;
   authorName: string;
+  authorRole?: string;
   question: string;
   options: PollOption[];
   votes: Record<string, string>;
