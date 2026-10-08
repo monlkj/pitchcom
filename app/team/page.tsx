@@ -483,7 +483,7 @@ export default function TeamPage() {
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <div style={{ width: 32, height: 32, borderRadius: 10, background: '#1e293b', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#60a5fa', flexShrink: 0 }}>{i + 1}</div>
                           <button onClick={() => {
-                            if (!isManager) return;
+                            if (!isManager && !isCoach) return;
                             if (pickingSlot?.type === 'lineup' && pickingSlot.idx !== i && pid) {
                               const next = [...lineup];
                               next[i] = next[pickingSlot.idx];
@@ -495,7 +495,7 @@ export default function TeamPage() {
                           }} style={{
                             flex: 1, padding: '11px 14px', borderRadius: 12, border: `2px solid ${isActive ? '#3b82f6' : player ? '#1e293b' : '#334155'}`,
                             background: isActive ? '#1e3a5f' : player ? '#1e293b' : 'transparent',
-                            color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
+                            color: player ? '#f8fafc' : '#475569', cursor: (isManager || isCoach) ? 'pointer' : 'default',
                             display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
                           }}>
                             {player ? (
@@ -504,28 +504,28 @@ export default function TeamPage() {
                                 <span style={{ fontSize: 15, fontWeight: 700 }}>{player.name}</span>
                               </>
                             ) : (
-                              <span style={{ fontSize: 13 }}>{isManager ? '탭하여 선수 선택' : '—'}</span>
+                              <span style={{ fontSize: 13 }}>{(isManager || isCoach) ? '탭하여 선수 선택' : '—'}</span>
                             )}
                           </button>
                           {/* 포지션 선택 버튼 */}
                           {player && (
                             <button
-                              onClick={() => isManager && setPickingPos(isPosOpen ? null : i)}
+                              onClick={() => (isManager || isCoach) && setPickingPos(isPosOpen ? null : i)}
                               style={{
                                 padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${isPosOpen ? '#3b82f6' : pos ? '#334155' : '#334155'}`,
                                 background: pos ? '#1e293b' : 'transparent',
                                 color: pos ? '#60a5fa' : '#475569',
-                                fontSize: 12, fontWeight: 700, cursor: isManager ? 'pointer' : 'default',
+                                fontSize: 12, fontWeight: 700, cursor: (isManager || isCoach) ? 'pointer' : 'default',
                                 whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 4,
                               }}
                             >
-                              {pos || '포지션'} {isManager && <span style={{ fontSize: 10, opacity: 0.6 }}>▼</span>}
+                              {pos || '포지션'} {(isManager || isCoach) && <span style={{ fontSize: 10, opacity: 0.6 }}>▼</span>}
                             </button>
                           )}
-                          {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 2px', flexShrink: 0 }}>×</button>}
+                          {(isManager || isCoach) && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 2px', flexShrink: 0 }}>×</button>}
                         </div>
                         {/* 포지션 드롭다운 */}
-                        {isManager && isPosOpen && (() => {
+                        {(isManager || isCoach) && isPosOpen && (() => {
                           const playerPositions = player ? (Array.isArray(player.position) ? player.position : [player.position]).filter(Boolean) : [];
                           const posOptions = playerPositions.length > 0 ? playerPositions : POSITIONS;
                           return (
@@ -546,7 +546,7 @@ export default function TeamPage() {
                   })}
                 </div>
 
-                {isManager && pickingSlot?.type === 'lineup' && (
+                {(isManager || isCoach) && pickingSlot?.type === 'lineup' && (
                   <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', marginTop: 8 }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #0f172a' }}>
                       <p style={{ margin: 0, fontSize: 13, color: '#60a5fa', fontWeight: 700 }}>{pickingSlot.idx + 1}번 타순 선수 선택</p>
@@ -622,10 +622,10 @@ export default function TeamPage() {
                     return (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                         <div style={{ width: 64, fontSize: 11, fontWeight: 800, color, textAlign: 'center', flexShrink: 0 }}>{label}</div>
-                        <button onClick={() => isManager && setPickingSlot(isActive ? null : { type: 'rotation', idx: i })} style={{
+                        <button onClick={() => (isManager || isCoach) && setPickingSlot(isActive ? null : { type: 'rotation', idx: i })} style={{
                           flex: 1, padding: '13px 16px', borderRadius: 12, border: `2px solid ${isActive ? color : player ? `${color}44` : '#334155'}`,
                           background: isActive ? `${color}22` : player ? `${color}11` : 'transparent',
-                          color: player ? '#f8fafc' : '#475569', cursor: isManager ? 'pointer' : 'default',
+                          color: player ? '#f8fafc' : '#475569', cursor: (isManager || isCoach) ? 'pointer' : 'default',
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left',
                         }}>
                           {player ? (
@@ -635,16 +635,16 @@ export default function TeamPage() {
                               {allPit[player.id] && <span style={{ fontSize: 11, color, marginLeft: 'auto' }}>ERA {fmt2(calcPit(allPit[player.id]).era)}</span>}
                             </>
                           ) : (
-                            <span style={{ fontSize: 13 }}>{isManager ? '탭하여 투수 선택' : '—'}</span>
+                            <span style={{ fontSize: 13 }}>{(isManager || isCoach) ? '탭하여 투수 선택' : '—'}</span>
                           )}
                         </button>
-                        {isManager && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
+                        {(isManager || isCoach) && player && <button onClick={() => clearSlot(i)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}>×</button>}
                       </div>
                     );
                   })}
                 </div>
 
-                {isManager && pickingSlot?.type === 'rotation' && (
+                {(isManager || isCoach) && pickingSlot?.type === 'rotation' && (
                   <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
                     <div style={{ padding: '12px 16px', borderBottom: '1px solid #0f172a' }}>
                       <p style={{ margin: 0, fontSize: 13, color: '#fb923c', fontWeight: 700 }}>{SLOT_LABELS[pickingSlot.idx]} 선택</p>

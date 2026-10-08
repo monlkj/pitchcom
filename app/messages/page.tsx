@@ -1,210 +1,295 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '../../lib/supabase';
+import { syncRead, syncWrite } from '../../lib/teamSync';
 
-interface Message {
+interface Notice {
   id: string;
-  sender: string;
-  role: string;
-  text: string;
-  time: number;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  content: string;
+  createdAt: string;
+  pinned?: boolean;
 }
 
-const ROLE_EMOJI: Record<string, string> = {
-  manager: '🧢',
-  coach: '📋',
-  player: '⚾',
-};
+interface PollOption { id: string; label: string; }
+interface Poll {
+  id: string;
+  authorId: string;
+  authorName: string;
+  question: string;
+  options: PollOption[];
+  votes: Record<string, string>;
+  createdAt: string;
+  closed?: boolean;
+}
 
 export default function MessagesPage() {
   const router = useRouter();
+  const [tab, setTab] = useState<'notice' | 'poll'>('notice');
+  const [role, setRole] = useState('');
+  const [myId, setMyId] = useState('');
   const [myName, setMyName] = useState('');
-  const [myRole, setMyRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [connected, setConnected] = useState(false);
-  const [noSupabase, setNoSupabase] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-  const channelRef = useRef<any>(null);
-  const seenIds = useRef<Set<string>>(new Set());
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [polls, setPolls] = useState<Poll[]>([]);
+  const [syncing, setSyncing] = useState(false);
+  const [addingNotice, setAddingNotice] = useState(false);
+  const [noticeText, setNoticeText] = useState('');
+  const [addingPoll, setAddingPoll] = useState(false);
+  const [pollQ, setPollQ] = useState('');
+  const [pollOpts, setPollOpts] = useState(['', '']);
+
+  const canEdit = role === 'manager' || role === 'coach';
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
-    const session = JSON.parse(raw);
-    if (!session.teamCode) { router.push('/'); return; }
+    const s = JSON.parse(raw);
+    setRole(s.role ?? '');
+    setMyId(s.id ?? '');
+    setMyName(s.name ?? '');
+    setTeamCode(s.teamCode ?? '');
 
-    const name = session.name ?? '';
-    const role = session.role ?? '';
-    const code = session.teamCode ?? '';
-    setMyName(name);
-    setMyRole(role);
-    setTeamCode(code);
+    const cachedN = JSON.parse(localStorage.getItem('pitchcom-notices') || '[]');
+    const cachedP = JSON.parse(localStorage.getItem('pitchcom-polls') || '[]');
+    setNotices(cachedN);
+    setPolls(cachedP);
 
-    // 저장된 메시지 복원
-    try {
-      const saved = localStorage.getItem(`pitchcom-msgs-${code}`);
-      if (saved) {
-        const parsed: Message[] = JSON.parse(saved);
-        parsed.forEach(m => seenIds.current.add(m.id));
-        setMessages(parsed);
-      }
-    } catch {}
-
-    // supabase 없으면 오프라인 모드
-    if (!supabase) { setNoSupabase(true); return; }
-
-    const ch = supabase
-      .channel(`pitchcom-chat-${code}`)
-      .on('broadcast', { event: 'msg' }, ({ payload }: { payload: any }) => {
-        const msg = payload as Message;
-        if (seenIds.current.has(msg.id)) return; // 중복 무시
-        seenIds.current.add(msg.id);
-        setMessages(prev => {
-          const next = [...prev, msg].slice(-200);
-          try { localStorage.setItem(`pitchcom-msgs-${code}`, JSON.stringify(next)); } catch {}
-          return next;
-        });
-      })
-      .subscribe((status: string) => {
-        setConnected(status === 'SUBSCRIBED');
+    if (s.teamCode) {
+      setSyncing(true);
+      Promise.all([syncRead(s.teamCode, 'notices'), syncRead(s.teamCode, 'polls')]).then(([rn, rp]) => {
+        setSyncing(false);
+        if (Array.isArray(rn)) { setNotices(rn); localStorage.setItem('pitchcom-notices', JSON.stringify(rn)); }
+        if (Array.isArray(rp)) { setPolls(rp); localStorage.setItem('pitchcom-polls', JSON.stringify(rp)); }
       });
-
-    channelRef.current = ch;
-    return () => { ch.unsubscribe(); };
+    }
   }, [router]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  const sendMessage = () => {
-    const text = input.trim();
-    if (!text) return;
-    setInput('');
-
-    const msg: Message = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      sender: myName,
-      role: myRole,
-      text,
-      time: Date.now(),
-    };
-
-    // 즉시 표시 (낙관적 업데이트)
-    seenIds.current.add(msg.id);
-    setMessages(prev => {
-      const next = [...prev, msg].slice(-200);
-      try { localStorage.setItem(`pitchcom-msgs-${teamCode}`, JSON.stringify(next)); } catch {}
-      return next;
-    });
-
-    // 브로드캐스트 (연결됐을 때만)
-    if (channelRef.current && connected) {
-      channelRef.current.send({ type: 'broadcast', event: 'msg', payload: msg });
-    }
+  const saveNotices = async (next: Notice[]) => {
+    setNotices(next);
+    localStorage.setItem('pitchcom-notices', JSON.stringify(next));
+    if (teamCode) await syncWrite(teamCode, 'notices', next);
   };
 
-  const clearMessages = () => {
-    if (!confirm('대화 내역을 모두 지울까요? (이 기기에서만 삭제돼요)')) return;
-    setMessages([]);
-    seenIds.current.clear();
-    try { localStorage.removeItem(`pitchcom-msgs-${teamCode}`); } catch {}
+  const savePolls = async (next: Poll[]) => {
+    setPolls(next);
+    localStorage.setItem('pitchcom-polls', JSON.stringify(next));
+    if (teamCode) await syncWrite(teamCode, 'polls', next);
   };
 
-  const timeStr = (t: number) => new Date(t).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  const addNotice = async () => {
+    if (!noticeText.trim()) return;
+    const n: Notice = { id: Date.now().toString(), authorId: myId, authorName: myName, authorRole: role, content: noticeText.trim(), createdAt: new Date().toISOString() };
+    await saveNotices([n, ...notices]);
+    setNoticeText('');
+    setAddingNotice(false);
+  };
+
+  const deleteNotice = async (id: string) => {
+    if (!confirm('공지를 삭제할까요?')) return;
+    await saveNotices(notices.filter(n => n.id !== id));
+  };
+
+  const togglePin = async (id: string) => {
+    await saveNotices(notices.map(n => n.id === id ? { ...n, pinned: !n.pinned } : n));
+  };
+
+  const addPoll = async () => {
+    const opts = pollOpts.map(o => o.trim()).filter(Boolean);
+    if (!pollQ.trim() || opts.length < 2) return;
+    const p: Poll = { id: Date.now().toString(), authorId: myId, authorName: myName, question: pollQ.trim(), options: opts.map((o, i) => ({ id: String(i), label: o })), votes: {}, createdAt: new Date().toISOString() };
+    await savePolls([p, ...polls]);
+    setPollQ('');
+    setPollOpts(['', '']);
+    setAddingPoll(false);
+  };
+
+  const vote = async (pollId: string, optId: string) => {
+    const p = polls.find(p => p.id === pollId);
+    if (!p || p.closed) return;
+    await savePolls(polls.map(p => p.id === pollId ? { ...p, votes: { ...p.votes, [myId]: optId } } : p));
+  };
+
+  const closePoll = async (pollId: string) => {
+    await savePolls(polls.map(p => p.id === pollId ? { ...p, closed: true } : p));
+  };
+
+  const deletePoll = async (id: string) => {
+    if (!confirm('투표를 삭제할까요?')) return;
+    await savePolls(polls.filter(p => p.id !== id));
+  };
+
+  const roleEmoji = (r: string) => r === 'manager' ? '🧢' : r === 'coach' ? '📋' : '⚾';
+
+  const timeAgo = (iso: string) => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const m = Math.floor(diff / 60000);
+    if (m < 1) return '방금';
+    if (m < 60) return `${m}분 전`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}시간 전`;
+    return `${Math.floor(h / 24)}일 전`;
+  };
+
+  const sortedNotices = [...notices].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return 1;
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+  });
+
+  const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
 
   return (
-    <div style={{ height: '100dvh', background: '#0f172a', display: 'flex', flexDirection: 'column', maxWidth: 560, margin: '0 auto' }}>
-      {/* Header */}
-      <div style={{ padding: '14px 20px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #1e293b', background: '#0f172a', flexShrink: 0 }}>
+    <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
         <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: 18, fontWeight: 900, color: '#f8fafc' }}>💬 팀 메시지</h1>
-          {teamCode && <p style={{ margin: 0, fontSize: 11, color: '#475569' }}>팀 코드: {teamCode}</p>}
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {messages.length > 0 && (
-            <button onClick={clearMessages} style={{ background: 'none', border: 'none', color: '#334155', fontSize: 12, cursor: 'pointer' }}>지우기</button>
-          )}
-          <div style={{
-            padding: '4px 10px', borderRadius: 20,
-            background: noSupabase ? '#1e293b' : connected ? '#064e3b' : '#1e293b',
-            color: noSupabase ? '#475569' : connected ? '#22c55e' : '#64748b',
-            fontSize: 11, fontWeight: 700,
-            border: `1px solid ${noSupabase ? '#33415544' : connected ? '#22c55e33' : '#33415544'}`,
-          }}>
-            {noSupabase ? '오프라인' : connected ? '● 연결됨' : '○ 연결 중...'}
-          </div>
-        </div>
+        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>💬 팀 메시지</h1>
+        {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
       </div>
 
-      {/* 오프라인 안내 */}
-      {noSupabase && (
-        <div style={{ padding: '10px 20px', background: '#1e293b', borderBottom: '1px solid #334155', fontSize: 12, color: '#64748b', textAlign: 'center' }}>
-          오프라인 모드 — 메시지가 이 기기에만 저장돼요
-        </div>
+      <div style={{ display: 'flex', background: '#1e293b', borderRadius: 12, padding: 4, marginBottom: 20, gap: 4 }}>
+        {(['notice', 'poll'] as const).map(t => (
+          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: tab === t ? '#3b82f6' : 'transparent', color: tab === t ? '#fff' : '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+            {t === 'notice' ? '📢 공지' : '🗳️ 투표'}
+          </button>
+        ))}
+      </div>
+
+      {/* ── 공지 ── */}
+      {tab === 'notice' && (
+        <>
+          {canEdit && (
+            <div style={{ marginBottom: 16 }}>
+              {addingNotice ? (
+                <div style={{ background: '#1e293b', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="공지 내용을 입력하세요" rows={4}
+                    style={{ ...inp, resize: 'none', lineHeight: 1.6 }} autoFocus />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={addNotice} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>공지하기</button>
+                    <button onClick={() => { setAddingNotice(false); setNoticeText(''); }} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>취소</button>
+                  </div>
+                </div>
+              ) : (
+                <button onClick={() => setAddingNotice(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 공지 작성</button>
+              )}
+            </div>
+          )}
+
+          {sortedNotices.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>📢</div>
+              <p style={{ margin: 0 }}>아직 공지가 없어요</p>
+            </div>
+          ) : sortedNotices.map(n => (
+            <div key={n.id} style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 10, border: n.pinned ? '1.5px solid #f59e0b44' : '1.5px solid transparent' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 16 }}>{roleEmoji(n.authorRole)}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>{n.authorName}</span>
+                  {n.pinned && <span style={{ fontSize: 11, background: '#f59e0b33', color: '#f59e0b', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📌 고정</span>}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: '#475569' }}>{timeAgo(n.createdAt)}</span>
+                  {canEdit && (
+                    <>
+                      <button onClick={() => togglePin(n.id)} style={{ background: 'none', border: 'none', color: n.pinned ? '#f59e0b' : '#475569', fontSize: 14, cursor: 'pointer' }}>📌</button>
+                      <button onClick={() => deleteNotice(n.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 14, cursor: 'pointer' }}>🗑️</button>
+                    </>
+                  )}
+                </div>
+              </div>
+              <p style={{ margin: 0, fontSize: 14, color: '#94a3b8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{n.content}</p>
+            </div>
+          ))}
+        </>
       )}
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 8px' }}>
-        {messages.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
-            <p style={{ margin: 0, fontSize: 14 }}>아직 메시지가 없어요<br/>첫 메시지를 보내보세요!</p>
-          </div>
-        ) : messages.map((m, i) => {
-          const isMe = m.sender === myName;
-          const prevSender = i > 0 ? messages[i - 1].sender : null;
-          const showSender = prevSender !== m.sender;
-          return (
-            <div key={m.id} style={{ marginBottom: showSender && i > 0 ? 12 : 4, display: 'flex', flexDirection: 'column', alignItems: isMe ? 'flex-end' : 'flex-start' }}>
-              {showSender && (
-                <div style={{ fontSize: 11, color: '#475569', marginBottom: 4, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
-                  {ROLE_EMOJI[m.role] ?? ''} {m.sender}
+      {/* ── 투표 ── */}
+      {tab === 'poll' && (
+        <>
+          {canEdit && (
+            <div style={{ marginBottom: 16 }}>
+              {addingPoll ? (
+                <div style={{ background: '#1e293b', borderRadius: 16, padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <input value={pollQ} onChange={e => setPollQ(e.target.value)} placeholder="투표 질문" style={inp} autoFocus />
+                  {pollOpts.map((o, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 6 }}>
+                      <input value={o} onChange={e => setPollOpts(opts => opts.map((v, j) => j === i ? e.target.value : v))} placeholder={`선택지 ${i + 1}`} style={{ ...inp, flex: 1 }} />
+                      {pollOpts.length > 2 && <button onClick={() => setPollOpts(opts => opts.filter((_, j) => j !== i))} style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: 18, cursor: 'pointer' }}>×</button>}
+                    </div>
+                  ))}
+                  {pollOpts.length < 5 && (
+                    <button onClick={() => setPollOpts(opts => [...opts, ''])} style={{ padding: '8px', borderRadius: 9, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 13, cursor: 'pointer' }}>+ 선택지 추가</button>
+                  )}
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={addPoll} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#8b5cf6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>투표 생성</button>
+                    <button onClick={() => { setAddingPoll(false); setPollQ(''); setPollOpts(['', '']); }} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>취소</button>
+                  </div>
                 </div>
+              ) : (
+                <button onClick={() => setAddingPoll(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 투표 만들기</button>
               )}
-              <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                <div style={{
-                  maxWidth: '72%', padding: '10px 14px',
-                  borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
-                  background: isMe ? '#3b82f6' : '#1e293b',
-                  color: '#f8fafc', fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word',
-                }}>
-                  {m.text}
-                </div>
-                <div style={{ fontSize: 10, color: '#334155', flexShrink: 0 }}>{timeStr(m.time)}</div>
-              </div>
             </div>
-          );
-        })}
-        <div ref={bottomRef} />
-      </div>
+          )}
 
-      {/* Input */}
-      <div style={{ padding: '12px 16px', borderTop: '1px solid #1e293b', background: '#0f172a', display: 'flex', gap: 10, alignItems: 'center', flexShrink: 0 }}>
-        <input
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
-          placeholder="메시지 입력..."
-          style={{
-            flex: 1, padding: '12px 16px', borderRadius: 24,
-            border: '1.5px solid #334155', background: '#1e293b',
-            color: '#f8fafc', fontSize: 14, outline: 'none',
-          }}
-        />
-        <button onClick={sendMessage} disabled={!input.trim()} style={{
-          width: 44, height: 44, borderRadius: '50%', border: 'none',
-          background: input.trim() ? '#3b82f6' : '#1e293b',
-          color: '#fff', fontSize: 20, cursor: input.trim() ? 'pointer' : 'not-allowed',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          transition: 'background 0.15s',
-        }}>↑</button>
-      </div>
+          {polls.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
+              <div style={{ fontSize: 40, marginBottom: 10 }}>🗳️</div>
+              <p style={{ margin: 0 }}>아직 투표가 없어요</p>
+            </div>
+          ) : polls.map(p => {
+            const myVote = p.votes[myId];
+            const hasVoted = !!myVote;
+            const totalVotes = Object.keys(p.votes).length;
+            const showResults = hasVoted || p.closed || canEdit;
+            return (
+              <div key={p.id} style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontSize: 14 }}>{roleEmoji(p.authorRole ?? role)}</span>
+                      <span style={{ fontSize: 12, color: '#64748b' }}>{p.authorName} · {timeAgo(p.createdAt)}</span>
+                      {p.closed && <span style={{ fontSize: 11, background: '#47556944', color: '#64748b', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>마감</span>}
+                    </div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: '#f8fafc' }}>{p.question}</div>
+                  </div>
+                  {canEdit && (
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                      {!p.closed && <button onClick={() => closePoll(p.id)} style={{ padding: '5px 10px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>마감</button>}
+                      <button onClick={() => deletePoll(p.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 14, cursor: 'pointer' }}>🗑️</button>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {p.options.map(opt => {
+                    const count = Object.values(p.votes).filter(v => v === opt.id).length;
+                    const pct = totalVotes > 0 ? Math.round(count / totalVotes * 100) : 0;
+                    const isMyVote = myVote === opt.id;
+                    return (
+                      <div key={opt.id} onClick={() => !p.closed && vote(p.id, opt.id)} style={{ borderRadius: 10, border: `1.5px solid ${isMyVote ? '#8b5cf6' : '#334155'}`, overflow: 'hidden', cursor: p.closed ? 'default' : 'pointer', position: 'relative' }}>
+                        {showResults && (
+                          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${isMyVote ? '#8b5cf633' : '#33415533'} ${pct}%, transparent ${pct}%)`, borderRadius: 9 }} />
+                        )}
+                        <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
+                          <span style={{ fontSize: 14, fontWeight: isMyVote ? 700 : 400, color: isMyVote ? '#c4b5fd' : '#94a3b8' }}>
+                            {isMyVote && '✓ '}{opt.label}
+                          </span>
+                          {showResults && <span style={{ fontSize: 13, fontWeight: 700, color: isMyVote ? '#c4b5fd' : '#64748b' }}>{pct}% ({count})</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ marginTop: 8, fontSize: 12, color: '#475569' }}>총 {totalVotes}명 참여{!hasVoted && !p.closed && !canEdit ? ' · 투표 후 결과 공개' : ''}</div>
+              </div>
+            );
+          })}
+        </>
+      )}
     </div>
   );
 }

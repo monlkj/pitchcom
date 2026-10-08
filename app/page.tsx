@@ -6,9 +6,10 @@ import { syncRead, syncWrite } from '../lib/teamSync';
 
 const MENUS = [
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
-  { href: '/stats', emoji: '📊', label: '투구 통계', desc: '구종별 기록 및 분석', color: '#10b981' },
-  { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록 관리', color: '#f59e0b' },
-  { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '팀원끼리 실시간 대화', color: '#8b5cf6' },
+  { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록·기록 관리', color: '#f59e0b' },
+  { href: '/calendar', emoji: '📅', label: '팀 달력', desc: '경기·훈련 일정 및 참석 관리', color: '#10b981' },
+  { href: '/field', emoji: '🗺️', label: '수비 포지션', desc: '야구장에서 수비 배치 편집', color: '#06b6d4' },
+  { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '공지 및 투표', color: '#8b5cf6' },
 ];
 
 export default function Home() {
