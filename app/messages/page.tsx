@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
+
+interface ChatMsg {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorRole: string;
+  text: string;
+  createdAt: string;
+}
 
 interface Notice {
   id: string;
@@ -29,19 +38,22 @@ interface Poll {
 
 export default function MessagesPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<'notice' | 'poll'>('notice');
+  const [tab, setTab] = useState<'chat' | 'notice' | 'poll'>('chat');
   const [role, setRole] = useState('');
   const [myId, setMyId] = useState('');
   const [myName, setMyName] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [syncing, setSyncing] = useState(false);
+  const [inputText, setInputText] = useState('');
   const [addingNotice, setAddingNotice] = useState(false);
   const [noticeText, setNoticeText] = useState('');
   const [addingPoll, setAddingPoll] = useState(false);
   const [pollQ, setPollQ] = useState('');
   const [pollOpts, setPollOpts] = useState(['', '']);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   const canEdit = role === 'manager' || role === 'coach';
 
@@ -54,20 +66,34 @@ export default function MessagesPage() {
     setMyName(s.name ?? '');
     setTeamCode(s.teamCode ?? '');
 
-    const cachedN = JSON.parse(localStorage.getItem('pitchcom-notices') || '[]');
-    const cachedP = JSON.parse(localStorage.getItem('pitchcom-polls') || '[]');
-    setNotices(cachedN);
-    setPolls(cachedP);
+    setMessages(JSON.parse(localStorage.getItem('pitchcom-messages') || '[]'));
+    setNotices(JSON.parse(localStorage.getItem('pitchcom-notices') || '[]'));
+    setPolls(JSON.parse(localStorage.getItem('pitchcom-polls') || '[]'));
 
     if (s.teamCode) {
       setSyncing(true);
-      Promise.all([syncRead(s.teamCode, 'notices'), syncRead(s.teamCode, 'polls')]).then(([rn, rp]) => {
+      Promise.all([
+        syncRead(s.teamCode, 'messages'),
+        syncRead(s.teamCode, 'notices'),
+        syncRead(s.teamCode, 'polls'),
+      ]).then(([rm, rn, rp]) => {
         setSyncing(false);
+        if (Array.isArray(rm)) { setMessages(rm); localStorage.setItem('pitchcom-messages', JSON.stringify(rm)); }
         if (Array.isArray(rn)) { setNotices(rn); localStorage.setItem('pitchcom-notices', JSON.stringify(rn)); }
         if (Array.isArray(rp)) { setPolls(rp); localStorage.setItem('pitchcom-polls', JSON.stringify(rp)); }
       });
     }
   }, [router]);
+
+  useEffect(() => {
+    if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, tab]);
+
+  const saveMessages = async (next: ChatMsg[]) => {
+    setMessages(next);
+    localStorage.setItem('pitchcom-messages', JSON.stringify(next));
+    if (teamCode) await syncWrite(teamCode, 'messages', next);
+  };
 
   const saveNotices = async (next: Notice[]) => {
     setNotices(next);
@@ -79,6 +105,18 @@ export default function MessagesPage() {
     setPolls(next);
     localStorage.setItem('pitchcom-polls', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'polls', next);
+  };
+
+  const sendMessage = async () => {
+    const text = inputText.trim();
+    if (!text) return;
+    const msg: ChatMsg = { id: Date.now().toString(), authorId: myId, authorName: myName, authorRole: role, text, createdAt: new Date().toISOString() };
+    await saveMessages([...messages, msg]);
+    setInputText('');
+  };
+
+  const deleteMessage = async (id: string) => {
+    await saveMessages(messages.filter(m => m.id !== id));
   };
 
   const addNotice = async () => {
@@ -101,7 +139,7 @@ export default function MessagesPage() {
   const addPoll = async () => {
     const opts = pollOpts.map(o => o.trim()).filter(Boolean);
     if (!pollQ.trim() || opts.length < 2) return;
-    const p: Poll = { id: Date.now().toString(), authorId: myId, authorName: myName, question: pollQ.trim(), options: opts.map((o, i) => ({ id: String(i), label: o })), votes: {}, createdAt: new Date().toISOString() };
+    const p: Poll = { id: Date.now().toString(), authorId: myId, authorName: myName, authorRole: role, question: pollQ.trim(), options: opts.map((o, i) => ({ id: String(i), label: o })), votes: {}, createdAt: new Date().toISOString() };
     await savePolls([p, ...polls]);
     setPollQ('');
     setPollOpts(['', '']);
@@ -124,6 +162,7 @@ export default function MessagesPage() {
   };
 
   const roleEmoji = (r: string) => r === 'manager' ? '🧢' : r === 'coach' ? '📋' : '⚾';
+  const roleColor = (r: string) => r === 'manager' ? '#f59e0b' : r === 'coach' ? '#10b981' : '#3b82f6';
 
   const timeAgo = (iso: string) => {
     const diff = Date.now() - new Date(iso).getTime();
@@ -135,6 +174,11 @@ export default function MessagesPage() {
     return `${Math.floor(h / 24)}일 전`;
   };
 
+  const fmtTime = (iso: string) => {
+    const d = new Date(iso);
+    return `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  };
+
   const sortedNotices = [...notices].sort((a, b) => {
     if (a.pinned && !b.pinned) return -1;
     if (!a.pinned && b.pinned) return 1;
@@ -143,25 +187,96 @@ export default function MessagesPage() {
 
   const inp: React.CSSProperties = { width: '100%', padding: '10px 12px', borderRadius: 10, border: '1.5px solid #334155', background: '#0f172a', color: '#f8fafc', fontSize: 14, outline: 'none', boxSizing: 'border-box' };
 
+  const TABS = [
+    { key: 'chat', label: '💬 채팅' },
+    { key: 'notice', label: '📢 공지' },
+    { key: 'poll', label: '🗳️ 투표' },
+  ] as const;
+
   return (
-    <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>💬 팀 메시지</h1>
-        {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
+    <div style={{ minHeight: '100vh', background: '#0f172a', display: 'flex', flexDirection: 'column', maxWidth: 560, margin: '0 auto' }}>
+      {/* 헤더 */}
+      <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+          <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+          <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>💬 팀 메시지</h1>
+          {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
+        </div>
+
+        {/* 탭 */}
+        <div style={{ display: 'flex', background: '#1e293b', borderRadius: 12, padding: 4, gap: 3, marginBottom: 0 }}>
+          {TABS.map(t => (
+            <button key={t.key} onClick={() => setTab(t.key)} style={{
+              flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none',
+              background: tab === t.key ? (t.key === 'chat' ? '#3b82f6' : t.key === 'notice' ? '#f59e0b' : '#8b5cf6') : 'transparent',
+              color: tab === t.key ? '#fff' : '#64748b',
+              fontSize: 12, fontWeight: 700, cursor: 'pointer',
+            }}>{t.label}</button>
+          ))}
+        </div>
       </div>
 
-      <div style={{ display: 'flex', background: '#1e293b', borderRadius: 12, padding: 4, marginBottom: 20, gap: 4 }}>
-        {(['notice', 'poll'] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} style={{ flex: 1, padding: '9px', borderRadius: 9, border: 'none', background: tab === t ? '#3b82f6' : 'transparent', color: tab === t ? '#fff' : '#64748b', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
-            {t === 'notice' ? '📢 공지' : '🗳️ 투표'}
-          </button>
-        ))}
-      </div>
+      {/* ── 채팅 ── */}
+      {tab === 'chat' && (
+        <>
+          <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
+            {messages.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
+                <p style={{ margin: 0 }}>첫 메시지를 보내보세요</p>
+              </div>
+            )}
+            {messages.map((msg, i) => {
+              const isMe = msg.authorId === myId;
+              const showHeader = i === 0 || messages[i - 1].authorId !== msg.authorId;
+              return (
+                <div key={msg.id} style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 8, marginTop: showHeader && i > 0 ? 8 : 0 }}>
+                  {/* 아바타 (상대방, 첫 메시지) */}
+                  {!isMe && (
+                    <div style={{ width: 32, height: 32, borderRadius: 10, background: roleColor(msg.authorRole) + '33', border: `1.5px solid ${roleColor(msg.authorRole)}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0, visibility: showHeader ? 'visible' : 'hidden' }}>
+                      {roleEmoji(msg.authorRole)}
+                    </div>
+                  )}
+                  <div style={{ maxWidth: '72%' }}>
+                    {!isMe && showHeader && (
+                      <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3, paddingLeft: 2, fontWeight: 600 }}>{msg.authorName}</div>
+                    )}
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, flexDirection: isMe ? 'row-reverse' : 'row' }}>
+                      <div style={{
+                        padding: '9px 13px', borderRadius: isMe ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
+                        background: isMe ? '#3b82f6' : '#1e293b',
+                        color: isMe ? '#fff' : '#e2e8f0',
+                        fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word',
+                      }}>{msg.text}</div>
+                      <span style={{ fontSize: 10, color: '#334155', flexShrink: 0 }}>{fmtTime(msg.createdAt)}</span>
+                      {(isMe || canEdit) && (
+                        <button onClick={() => deleteMessage(msg.id)} style={{ background: 'none', border: 'none', color: '#334155', fontSize: 12, cursor: 'pointer', padding: 2, flexShrink: 0 }}>×</button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* 입력창 */}
+          <div style={{ padding: '12px 16px', borderTop: '1px solid #1e293b', flexShrink: 0, display: 'flex', gap: 8 }}>
+            <input
+              value={inputText}
+              onChange={e => setInputText(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
+              placeholder="메시지 입력..."
+              style={{ flex: 1, padding: '11px 16px', borderRadius: 24, border: '1.5px solid #334155', background: '#1e293b', color: '#f8fafc', fontSize: 14, outline: 'none' }}
+            />
+            <button onClick={sendMessage} disabled={!inputText.trim()} style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: inputText.trim() ? '#3b82f6' : '#1e293b', color: inputText.trim() ? '#fff' : '#334155', fontSize: 18, cursor: inputText.trim() ? 'pointer' : 'default', flexShrink: 0 }}>↑</button>
+          </div>
+        </>
+      )}
 
       {/* ── 공지 ── */}
       {tab === 'notice' && (
-        <>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
           {canEdit && (
             <div style={{ marginBottom: 16 }}>
               {addingNotice ? (
@@ -169,35 +284,34 @@ export default function MessagesPage() {
                   <textarea value={noticeText} onChange={e => setNoticeText(e.target.value)} placeholder="공지 내용을 입력하세요" rows={4}
                     style={{ ...inp, resize: 'none', lineHeight: 1.6 }} autoFocus />
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={addNotice} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>공지하기</button>
+                    <button onClick={addNotice} style={{ flex: 1, padding: 10, borderRadius: 10, border: 'none', background: '#f59e0b', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>공지하기</button>
                     <button onClick={() => { setAddingNotice(false); setNoticeText(''); }} style={{ padding: '10px 16px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 14, cursor: 'pointer' }}>취소</button>
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setAddingNotice(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 공지 작성</button>
+                <button onClick={() => setAddingNotice(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #f59e0b44', background: 'transparent', color: '#f59e0b', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 공지 작성</button>
               )}
             </div>
           )}
-
-          {sortedNotices.length === 0 ? (
+          {sortedNotices.length === 0 && !addingNotice ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>📢</div>
               <p style={{ margin: 0 }}>아직 공지가 없어요</p>
             </div>
           ) : sortedNotices.map(n => (
-            <div key={n.id} style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 10, border: n.pinned ? '1.5px solid #f59e0b44' : '1.5px solid transparent' }}>
+            <div key={n.id} style={{ background: '#1e293b', borderRadius: 16, padding: 16, marginBottom: 10, border: n.pinned ? '1.5px solid #f59e0b55' : '1.5px solid transparent' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 16 }}>{roleEmoji(n.authorRole)}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#f8fafc' }}>{n.authorName}</span>
-                  {n.pinned && <span style={{ fontSize: 11, background: '#f59e0b33', color: '#f59e0b', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📌 고정</span>}
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: roleColor(n.authorRole) + '33', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13 }}>{roleEmoji(n.authorRole)}</div>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{n.authorName}</span>
+                  {n.pinned && <span style={{ fontSize: 11, background: '#f59e0b22', color: '#f59e0b', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>📌 고정</span>}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontSize: 11, color: '#475569' }}>{timeAgo(n.createdAt)}</span>
                   {canEdit && (
                     <>
-                      <button onClick={() => togglePin(n.id)} style={{ background: 'none', border: 'none', color: n.pinned ? '#f59e0b' : '#475569', fontSize: 14, cursor: 'pointer' }}>📌</button>
-                      <button onClick={() => deleteNotice(n.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 14, cursor: 'pointer' }}>🗑️</button>
+                      <button onClick={() => togglePin(n.id)} style={{ background: 'none', border: 'none', color: n.pinned ? '#f59e0b' : '#475569', fontSize: 14, cursor: 'pointer', padding: 2 }}>📌</button>
+                      <button onClick={() => deleteNotice(n.id)} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 14, cursor: 'pointer', padding: 2 }}>🗑️</button>
                     </>
                   )}
                 </div>
@@ -205,12 +319,12 @@ export default function MessagesPage() {
               <p style={{ margin: 0, fontSize: 14, color: '#94a3b8', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{n.content}</p>
             </div>
           ))}
-        </>
+        </div>
       )}
 
       {/* ── 투표 ── */}
       {tab === 'poll' && (
-        <>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px' }}>
           {canEdit && (
             <div style={{ marginBottom: 16 }}>
               {addingPoll ? (
@@ -231,12 +345,11 @@ export default function MessagesPage() {
                   </div>
                 </div>
               ) : (
-                <button onClick={() => setAddingPoll(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #334155', background: 'transparent', color: '#64748b', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 투표 만들기</button>
+                <button onClick={() => setAddingPoll(true)} style={{ width: '100%', padding: '12px', borderRadius: 12, border: '1.5px dashed #8b5cf644', background: 'transparent', color: '#8b5cf6', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>+ 투표 만들기</button>
               )}
             </div>
           )}
-
-          {polls.length === 0 ? (
+          {polls.length === 0 && !addingPoll ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>🗳️</div>
               <p style={{ margin: 0 }}>아직 투표가 없어요</p>
@@ -251,7 +364,7 @@ export default function MessagesPage() {
                 <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 12 }}>
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                      <span style={{ fontSize: 14 }}>{roleEmoji(p.authorRole ?? role)}</span>
+                      <span style={{ fontSize: 13 }}>{roleEmoji(p.authorRole ?? role)}</span>
                       <span style={{ fontSize: 12, color: '#64748b' }}>{p.authorName} · {timeAgo(p.createdAt)}</span>
                       {p.closed && <span style={{ fontSize: 11, background: '#47556944', color: '#64748b', borderRadius: 6, padding: '2px 8px', fontWeight: 700 }}>마감</span>}
                     </div>
@@ -264,7 +377,6 @@ export default function MessagesPage() {
                     </div>
                   )}
                 </div>
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {p.options.map(opt => {
                     const count = Object.values(p.votes).filter(v => v === opt.id).length;
@@ -272,13 +384,9 @@ export default function MessagesPage() {
                     const isMyVote = myVote === opt.id;
                     return (
                       <div key={opt.id} onClick={() => !p.closed && vote(p.id, opt.id)} style={{ borderRadius: 10, border: `1.5px solid ${isMyVote ? '#8b5cf6' : '#334155'}`, overflow: 'hidden', cursor: p.closed ? 'default' : 'pointer', position: 'relative' }}>
-                        {showResults && (
-                          <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${isMyVote ? '#8b5cf633' : '#33415533'} ${pct}%, transparent ${pct}%)`, borderRadius: 9 }} />
-                        )}
+                        {showResults && <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(90deg, ${isMyVote ? '#8b5cf633' : '#33415533'} ${pct}%, transparent ${pct}%)`, borderRadius: 9 }} />}
                         <div style={{ padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'relative' }}>
-                          <span style={{ fontSize: 14, fontWeight: isMyVote ? 700 : 400, color: isMyVote ? '#c4b5fd' : '#94a3b8' }}>
-                            {isMyVote && '✓ '}{opt.label}
-                          </span>
+                          <span style={{ fontSize: 14, fontWeight: isMyVote ? 700 : 400, color: isMyVote ? '#c4b5fd' : '#94a3b8' }}>{isMyVote && '✓ '}{opt.label}</span>
                           {showResults && <span style={{ fontSize: 13, fontWeight: 700, color: isMyVote ? '#c4b5fd' : '#64748b' }}>{pct}% ({count})</span>}
                         </div>
                       </div>
@@ -289,7 +397,7 @@ export default function MessagesPage() {
               </div>
             );
           })}
-        </>
+        </div>
       )}
     </div>
   );
