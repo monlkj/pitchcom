@@ -229,31 +229,31 @@ export default function FieldPage() {
               return (
                 <g key={pos} onClick={() => canEdit && setPickingPos(isActive ? '' : pos)} style={{ cursor: canEdit ? 'pointer' : 'default' }}>
                   {/* 글로우 */}
-                  {isActive && <circle cx={cx} cy={cy} r="30" fill="#3b82f620" />}
+                  {isActive && <circle cx={cx} cy={cy} r="34" fill="#3b82f620" />}
                   {/* 배경 원 */}
-                  <circle cx={cx} cy={cy} r="22"
+                  <circle cx={cx} cy={cy} r="26"
                     fill={isActive ? '#1e3a5f' : player ? '#0f2a4a' : '#00000050'}
                     stroke={isActive ? '#60a5fa' : player ? '#3b82f688' : '#ffffff22'}
                     strokeWidth={isActive ? 2 : 1.5}
                   />
                   {player ? (
                     <>
-                      <text x={cx} y={cy - 5} textAnchor="middle" fill="#93c5fd" fontSize="10" fontWeight="800">#{player.number || '?'}</text>
-                      <text x={cx} y={cy + 7} textAnchor="middle" fill="#e2e8f0" fontSize="9.5" fontWeight="700">
-                        {player.name.length > 4 ? player.name.slice(0, 4) : player.name}
+                      <text x={cx} y={cy - 6} textAnchor="middle" fill="#93c5fd" fontSize="11" fontWeight="800">#{player.number || '?'}</text>
+                      <text x={cx} y={cy + 8} textAnchor="middle" fill="#f8fafc" fontSize="12" fontWeight="800">
+                        {player.name.length > 3 ? player.name.slice(0, 3) : player.name}
                       </text>
                     </>
                   ) : (
                     <>
-                      <text x={cx} y={cy - 3} textAnchor="middle" fill="#ffffff40" fontSize="9" fontWeight="700">{abbr}</text>
-                      <text x={cx} y={cy + 8} textAnchor="middle" fill="#ffffff25" fontSize="8">{pos}</text>
+                      <text x={cx} y={cy - 2} textAnchor="middle" fill="#ffffff50" fontSize="11" fontWeight="700">{abbr}</text>
+                      <text x={cx} y={cy + 10} textAnchor="middle" fill="#ffffff30" fontSize="9">{pos}</text>
                     </>
                   )}
                   {/* 삭제 버튼 */}
                   {canEdit && player && (
                     <g onClick={ev => { ev.stopPropagation(); removeSlot(pos); }}>
-                      <circle cx={cx + 16} cy={cy - 16} r="8" fill="#ef4444cc" />
-                      <text x={cx + 16} y={cy - 12} textAnchor="middle" fill="#fff" fontSize="10" fontWeight="900">×</text>
+                      <circle cx={cx + 20} cy={cy - 20} r="9" fill="#ef4444cc" />
+                      <text x={cx + 20} y={cy - 16} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="900">×</text>
                     </g>
                   )}
                 </g>
