@@ -27,12 +27,20 @@ function calcBat(s: BatStats) {
   return { avg, obp, slg, ops: obp + slg, kpct };
 }
 
+// 야구 이닝 표기(5.1 = 5이닝 1아웃 = 16/3이닝) → 실수 이닝으로 변환
+function ipReal(ip: number): number {
+  const whole = Math.floor(ip);
+  const outs = Math.round((ip - whole) * 10); // 0, 1, 2
+  return whole + outs / 3;
+}
+
 function calcPit(s: PitStats) {
-  const era = s.ip > 0 ? (s.er * 9) / s.ip : NaN;
-  const whip = s.ip > 0 ? (s.bb + s.ha) / s.ip : NaN;
-  const kper9 = s.ip > 0 ? (s.k * 9) / s.ip : NaN;
-  const bbhbpPerIp = s.ip > 0 ? (s.bb + s.hbp) * 9 / s.ip : NaN;
-  const kbb = s.ip > 0 ? (s.k - s.bb) * 9 / s.ip : NaN;
+  const ip = ipReal(s.ip);
+  const era = ip > 0 ? (s.er * 9) / ip : NaN;
+  const whip = ip > 0 ? (s.bb + s.ha) / ip : NaN;
+  const kper9 = ip > 0 ? (s.k * 9) / ip : NaN;
+  const bbhbpPerIp = ip > 0 ? (s.bb + s.hbp) * 9 / ip : NaN;
+  const kbb = ip > 0 ? (s.k - s.bb) * 9 / ip : NaN;
   return { era, whip, kper9, bbhbpPerIp, kbb };
 }
 
