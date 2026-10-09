@@ -38,9 +38,11 @@ export default function FieldPage() {
   const [pickingPos, setPickingPos] = useState('');
   const [newFormName, setNewFormName] = useState('');
   const [savingForm, setSavingForm] = useState(false);
+  const [fieldTeam, setFieldTeam] = useState('all');
 
   const canEdit = role === 'manager' || role === 'coach';
   const allPlayers: Player[] = teams.flatMap(t => t.players);
+  const pickerPlayers = fieldTeam === 'all' ? allPlayers : (teams.find(t => t.id === fieldTeam)?.players ?? []);
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -295,13 +297,22 @@ export default function FieldPage() {
               </div>
               <button onClick={() => setPickingPos('')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 18, cursor: 'pointer' }}>×</button>
             </div>
-            {allPlayers.length === 0 ? (
+            {/* 팀 필터 */}
+            {teams.length > 1 && (
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', padding: '10px 16px', borderBottom: '1px solid #0f172a' }}>
+                <button onClick={() => setFieldTeam('all')} style={{ padding: '5px 12px', borderRadius: 16, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: fieldTeam === 'all' ? '#3b82f6' : '#0f172a', color: fieldTeam === 'all' ? '#fff' : '#64748b' }}>전체</button>
+                {teams.map(t => (
+                  <button key={t.id} onClick={() => setFieldTeam(t.id)} style={{ padding: '5px 12px', borderRadius: 16, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer', background: fieldTeam === t.id ? '#3b82f6' : '#0f172a', color: fieldTeam === t.id ? '#fff' : '#64748b' }}>{t.name}</button>
+                ))}
+              </div>
+            )}
+            {pickerPlayers.length === 0 ? (
               <div style={{ padding: '24px', textAlign: 'center', color: '#475569', fontSize: 13 }}>먼저 팀에 선수를 추가해주세요</div>
-            ) : allPlayers.map((p, i) => {
+            ) : pickerPlayers.map((p, i) => {
               const alreadyAt = POS_KEYS.find(pos => slots[pos] === p.id);
               return (
                 <div key={p.id} onClick={() => assignPlayer(p.id)}
-                  style={{ padding: '11px 16px', borderBottom: i < allPlayers.length - 1 ? '1px solid #0f172a' : 'none', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', opacity: alreadyAt ? 0.4 : 1, background: alreadyAt ? '#0f172a' : 'transparent', transition: 'background 0.15s' }}>
+                  style={{ padding: '11px 16px', borderBottom: i < pickerPlayers.length - 1 ? '1px solid #0f172a' : 'none', display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', opacity: alreadyAt ? 0.4 : 1, background: alreadyAt ? '#0f172a' : 'transparent', transition: 'background 0.15s' }}>
                   <div style={{ width: 34, height: 34, borderRadius: 9, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 900, color: '#60a5fa', border: '1px solid #1e3a5f' }}>
                     #{p.number || '?'}
                   </div>

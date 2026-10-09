@@ -78,6 +78,9 @@ export default function Home() {
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     // 클라우드에도 반영
     await syncWrite('__global__', 'users', updated);
+    // 이전 팀 캐시 초기화 (다른 팀으로 이동 시 오래된 데이터 제거)
+    const TEAM_CACHE_KEYS = ['pitchcom-teams','pitchcom-bat-stats','pitchcom-pit-stats','pitchcom-lineups','pitchcom-lineup-positions','pitchcom-rotations','pitchcom-formations','pitchcom-messages','pitchcom-notices','pitchcom-polls'];
+    TEAM_CACHE_KEYS.forEach(k => localStorage.removeItem(k));
     // 세션에서 이름/역할 명시적 갱신 (이전 상태 잔류 방지)
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
