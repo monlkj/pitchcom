@@ -9,7 +9,20 @@ interface Member {
   name: string;
   email: string;
   role: string;
+  coachType?: string;
   teamCode: string;
+  joinApproved?: boolean;
+}
+
+interface JoinRequest {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  coachType?: string;
+  teamCode: string;
+  status: 'pending' | 'approved' | 'rejected';
+  createdAt: string;
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -23,10 +36,10 @@ export default function AdminPage() {
   const [myId, setMyId] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
+  const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
   const [ready, setReady] = useState(false);
 
   const loadMembers = async (code: string) => {
-    // 로컬 + 클라우드 병합 후 해당 팀 코드 필터
     const local: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const cloud: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const merged: Member[] = [...local];
@@ -34,7 +47,37 @@ export default function AdminPage() {
       if (!merged.find(u => u.email === cu.email)) merged.push(cu);
     }
     localStorage.setItem('pitchcom-users', JSON.stringify(merged));
-    setMembers(merged.filter(u => u.teamCode === code));
+    setMembers(merged.filter(u => u.teamCode === code && u.joinApproved !== false));
+    const reqs: JoinRequest[] = (await syncRead(code, 'join-requests')) ?? [];
+    setJoinRequests(reqs.filter(r => r.status === 'pending'));
+  };
+
+  const approveRequest = async (req: JoinRequest) => {
+    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
+    const allUsers = [...cloudUsers];
+    for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const updated = allUsers.map(u => u.id === req.userId ? { ...u, joinApproved: true } : u);
+    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+    await syncWrite('__global__', 'users', updated);
+    const reqs: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
+    const updatedReqs = reqs.map(r => r.id === req.id ? { ...r, status: 'approved' as const } : r);
+    await syncWrite(teamCode, 'join-requests', updatedReqs);
+    loadMembers(teamCode);
+  };
+
+  const rejectRequest = async (req: JoinRequest) => {
+    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+    const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
+    const allUsers = [...cloudUsers];
+    for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const updated = allUsers.map(u => u.id === req.userId ? { ...u, teamCode: '', joinApproved: undefined } : u);
+    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+    await syncWrite('__global__', 'users', updated);
+    const reqs: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
+    const updatedReqs = reqs.map(r => r.id === req.id ? { ...r, status: 'rejected' as const } : r);
+    await syncWrite(teamCode, 'join-requests', updatedReqs);
+    loadMembers(teamCode);
   };
 
   useEffect(() => {
@@ -82,6 +125,30 @@ export default function AdminPage() {
           <p style={{ margin: '2px 0 0', fontSize: 12, color: '#475569' }}>팀 코드: {teamCode}</p>
         </div>
       </div>
+
+      {/* 가입 요청 */}
+      {joinRequests.length > 0 && (
+        <div style={{ marginBottom: 20 }}>
+          <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>⚡ 가입 요청 ({joinRequests.length})</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {joinRequests.map(req => (
+              <div key={req.id} style={{ padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1.5px solid #f59e0b33', display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{ width: 38, height: 38, borderRadius: 12, background: '#f59e0b22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                  {req.userRole === 'coach' ? '📋' : '⚾'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{req.userName}</div>
+                  <div style={{ fontSize: 12, color: '#f59e0b' }}>{req.userRole === 'coach' ? (req.coachType || '코치') : '선수'} · 가입 요청</div>
+                </div>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => approveRequest(req)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>수락</button>
+                  <button onClick={() => rejectRequest(req)} style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid #ef444433', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>거절</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* 팀원 수 */}
       <div style={{ padding: '16px 20px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155', marginBottom: 20, display: 'flex', gap: 20 }}>
@@ -132,7 +199,7 @@ export default function AdminPage() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{m.name}</div>
                   <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{ROLE_LABEL[m.role] ?? m.role}</span>
+                <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{m.role === 'coach' ? `📋 ${m.coachType || '코치'}` : (ROLE_LABEL[m.role] ?? m.role)}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button onClick={() => kickMember(m)} style={{
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #f59e0b33',

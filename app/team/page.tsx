@@ -158,23 +158,23 @@ export default function TeamPage() {
   const allPlayers = teams.flatMap(t => [...t.players].sort(sortKo).map(p => ({ ...p, teamName: t.name })));
 
   const sortedCurrentPlayers = (players: Player[]) => {
-    const arr = [...players];
+    // 타격 기준: 타석 있는 선수만 / 투구 기준: 등판한 선수만
     switch (playerSort) {
-      case '가나다': return arr.sort(sortKo);
-      case '번호': return arr.sort((a, b) => (parseInt(a.number) || 999) - (parseInt(b.number) || 999));
-      case '타율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).avg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).avg || 0));
-      case '장타율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).slg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).slg || 0));
-      case 'OPS': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).ops || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).ops || 0));
-      case '출루율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).obp || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).obp || 0));
-      case 'ERA': return arr.sort((a, b) => {
+      case '가나다': return [...players].sort(sortKo);
+      case '번호': return [...players].sort((a, b) => (parseInt(a.number) || 999) - (parseInt(b.number) || 999));
+      case '타율': return [...players].filter(p => (allBat[p.id]?.pa ?? 0) > 0).sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).avg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).avg || 0));
+      case '장타율': return [...players].filter(p => (allBat[p.id]?.pa ?? 0) > 0).sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).slg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).slg || 0));
+      case 'OPS': return [...players].filter(p => (allBat[p.id]?.pa ?? 0) > 0).sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).ops || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).ops || 0));
+      case '출루율': return [...players].filter(p => (allBat[p.id]?.pa ?? 0) > 0).sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).obp || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).obp || 0));
+      case 'ERA': return [...players].filter(p => (allPit[p.id]?.ip ?? 0) > 0).sort((a, b) => {
         const ea = calcPit(allPit[a.id] ?? EMPTY_PIT).era;
         const eb = calcPit(allPit[b.id] ?? EMPTY_PIT).era;
         if (isNaN(ea) && isNaN(eb)) return 0;
         if (isNaN(ea)) return 1; if (isNaN(eb)) return -1;
         return ea - eb;
       });
-      case 'K9': return arr.sort((a, b) => (calcPit(allPit[b.id] ?? EMPTY_PIT).kper9 || 0) - (calcPit(allPit[a.id] ?? EMPTY_PIT).kper9 || 0));
-      default: return arr;
+      case 'K9': return [...players].filter(p => (allPit[p.id]?.ip ?? 0) > 0).sort((a, b) => (calcPit(allPit[b.id] ?? EMPTY_PIT).kper9 || 0) - (calcPit(allPit[a.id] ?? EMPTY_PIT).kper9 || 0));
+      default: return [...players].sort(sortKo);
     }
   };
 
@@ -182,6 +182,9 @@ export default function TeamPage() {
     const t = teams.find(t => t.players.some(pl => pl.id === p.id));
     return t?.id === statsTeam;
   });
+  // 한 타석도 없는 선수 / 등판 없는 선수는 기록 탭에서 제외
+  const filteredStatsBatters = filteredStatsPlayers.filter(p => (allBat[p.id]?.pa ?? 0) > 0);
+  const filteredStatsPitchers = filteredStatsPlayers.filter(p => (allPit[p.id]?.ip ?? 0) > 0);
 
   const bf = (k: keyof BatStats, v: string) => setBatForm(f => ({ ...f, [k]: Math.max(0, parseInt(v) || 0) }));
   const pf = (k: keyof PitStats, v: string) => setPitForm(f => ({ ...f, [k]: k === 'ip' ? Math.max(0, parseFloat(v) || 0) : Math.max(0, parseInt(v) || 0) }));
@@ -345,12 +348,12 @@ export default function TeamPage() {
               ))}
             </div>
           )}
-          {filteredStatsPlayers.length === 0 ? (
+          {filteredStatsBatters.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>🏏</div>
-              <p style={{ margin: 0 }}>선수 관리 탭에서 선수를 먼저 추가해주세요</p>
+              <p style={{ margin: 0 }}>아직 타석 기록이 있는 선수가 없어요</p>
             </div>
-          ) : filteredStatsPlayers.map(p => {
+          ) : filteredStatsBatters.map(p => {
             const s = allBat[p.id] ?? EMPTY_BAT;
             const c = calcBat(s);
             const isEditing = editingId === p.id;
@@ -424,12 +427,12 @@ export default function TeamPage() {
               ))}
             </div>
           )}
-          {filteredStatsPlayers.length === 0 ? (
+          {filteredStatsPitchers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>⚾</div>
-              <p style={{ margin: 0 }}>선수 관리 탭에서 선수를 먼저 추가해주세요</p>
+              <p style={{ margin: 0 }}>아직 등판 기록이 있는 선수가 없어요</p>
             </div>
-          ) : filteredStatsPlayers.map(p => {
+          ) : filteredStatsPitchers.map(p => {
             const s = allPit[p.id] ?? EMPTY_PIT;
             const c = calcPit(s);
             const isEditing = editingId === p.id;

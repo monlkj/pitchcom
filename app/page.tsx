@@ -19,9 +19,35 @@ export default function Home() {
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
+  const [coachType, setCoachType] = useState('');
   const [editingCode, setEditingCode] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [joinApproved, setJoinApproved] = useState<boolean | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  const checkApprovalStatus = async (sessionId: string, code: string) => {
+    const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
+    const me = cloudUsers.find((u: any) => u.id === sessionId);
+    if (!me) return;
+    if (me.joinApproved === true) {
+      const raw = localStorage.getItem('pitchcom-session')!;
+      const session = JSON.parse(raw);
+      session.joinApproved = true;
+      localStorage.setItem('pitchcom-session', JSON.stringify(session));
+      const localUsers: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+      const updated = localUsers.map((u: any) => u.id === sessionId ? { ...u, joinApproved: true } : u);
+      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+      setJoinApproved(true);
+    } else if (me.teamCode === '' && code) {
+      // 거절됨 (teamCode 초기화)
+      const raw = localStorage.getItem('pitchcom-session')!;
+      const session = JSON.parse(raw);
+      session.teamCode = ''; session.joinApproved = undefined;
+      localStorage.setItem('pitchcom-session', JSON.stringify(session));
+      setTeamCode(''); setJoinApproved(null);
+    }
+  };
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -29,8 +55,20 @@ export default function Home() {
     const session = JSON.parse(raw);
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
+    setCoachType(session.coachType ?? '');
     setTeamCode(session.teamCode ?? '');
+    setJoinApproved(session.joinApproved ?? null);
     setReady(true);
+    // 감독: 가입 요청 수 확인
+    if (session.role === 'manager' && session.teamCode) {
+      syncRead(session.teamCode, 'join-requests').then((reqs: any) => {
+        if (Array.isArray(reqs)) setPendingCount(reqs.filter((r: any) => r.status === 'pending').length);
+      });
+    }
+    // 코치/선수가 대기 중이면 승인 여부 확인
+    if ((session.role === 'coach' || session.role === 'player') && session.teamCode && session.joinApproved === false) {
+      checkApprovalStatus(session.id, session.teamCode);
+    }
   }, [router]);
 
   const logout = () => {
@@ -78,13 +116,26 @@ export default function Home() {
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     // 클라우드에도 반영
     await syncWrite('__global__', 'users', updated);
-    // 이전 팀 캐시 초기화 (다른 팀으로 이동 시 오래된 데이터 제거)
-    const TEAM_CACHE_KEYS = ['pitchcom-teams','pitchcom-bat-stats','pitchcom-pit-stats','pitchcom-lineups','pitchcom-lineup-positions','pitchcom-rotations','pitchcom-formations','pitchcom-messages','pitchcom-notices','pitchcom-polls'];
-    TEAM_CACHE_KEYS.forEach(k => localStorage.removeItem(k));
+    // 코치/선수는 가입 요청 생성 후 대기
+    if (userRole === 'coach' || userRole === 'player') {
+      const raw2 = localStorage.getItem('pitchcom-session')!;
+      const session2 = JSON.parse(raw2);
+      const existingReqs: any[] = (await syncRead(code, 'join-requests')) ?? [];
+      const newReq = { id: Date.now().toString(), userId: session2.id, userName: session2.name, userRole: session2.role, coachType: session2.coachType, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
+      await syncWrite(code, 'join-requests', [...existingReqs.filter((r: any) => r.userId !== session2.id), newReq]);
+      updated.forEach((u: any) => { if (u.id === session2.id) { u.teamCode = code; u.joinApproved = false; } });
+      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+      await syncWrite('__global__', 'users', updated);
+      session.teamCode = code; session.joinApproved = false;
+      localStorage.setItem('pitchcom-session', JSON.stringify(session));
+      setTeamCode(code); setJoinApproved(false); setEditingCode(false); setNewCode(''); setCodeError('');
+      return;
+    }
     // 세션에서 이름/역할 명시적 갱신 (이전 상태 잔류 방지)
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
     setTeamCode(code);
+    setJoinApproved(true);
     setEditingCode(false);
     setNewCode('');
     setCodeError('');
@@ -92,9 +143,11 @@ export default function Home() {
 
   if (!ready) return null;
 
-  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? '📋 코치' : '⚾ 선수';
+  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? `📋 ${coachType || '코치'}` : '⚾ 선수';
   // 코치/선수이고 팀코드 없으면 팀코드 입력만 표시
   const needTeamCode = !teamCode && (userRole === 'coach' || userRole === 'player');
+  // 대기 중 화면
+  const isPending = (userRole === 'coach' || userRole === 'player') && teamCode && joinApproved === false;
 
   return (
     <>
@@ -125,8 +178,37 @@ export default function Home() {
           </div>
         </div>
 
-        {/* ── 코치/선수 & 팀코드 없음: 홈 레이아웃 안에 팀코드 입력 카드만 ── */}
-        {needTeamCode ? (
+        {/* ── 가입 승인 대기 화면 ── */}
+        {isPending ? (
+          <div style={{ padding: '60px 24px', maxWidth: 480, margin: '0 auto', textAlign: 'center' }}>
+            <div style={{ fontSize: 64, marginBottom: 20 }}>⏳</div>
+            <h2 style={{ margin: '0 0 10px', fontSize: 22, fontWeight: 900, color: '#f8fafc' }}>승인 대기 중</h2>
+            <p style={{ margin: '0 0 6px', color: '#94a3b8', fontSize: 14 }}>감독님이 가입 요청을 검토하고 있어요</p>
+            <p style={{ margin: '0 0 32px', color: '#475569', fontSize: 13 }}>팀 코드: <span style={{ color: '#60a5fa', fontWeight: 900 }}>{teamCode}</span></p>
+            <button onClick={async () => {
+              const raw = localStorage.getItem('pitchcom-session');
+              if (raw) { const s = JSON.parse(raw); await checkApprovalStatus(s.id, s.teamCode); }
+            }} style={{ padding: '13px 32px', borderRadius: 13, border: 'none', background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)', color: '#fff', fontSize: 15, fontWeight: 900, cursor: 'pointer', marginBottom: 14 }}>
+              새로고침
+            </button>
+            <div>
+              <button onClick={async () => {
+                const raw = localStorage.getItem('pitchcom-session');
+                if (!raw) return;
+                const s = JSON.parse(raw);
+                const users: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+                const updated = users.map((u: any) => u.id === s.id ? { ...u, teamCode: '', joinApproved: undefined } : u);
+                localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+                s.teamCode = ''; s.joinApproved = undefined;
+                localStorage.setItem('pitchcom-session', JSON.stringify(s));
+                await syncWrite('__global__', 'users', updated);
+                setTeamCode(''); setJoinApproved(null);
+              }} style={{ background: 'none', border: 'none', color: '#475569', fontSize: 13, cursor: 'pointer' }}>요청 취소하기</button>
+            </div>
+          </div>
+
+        ) : /* ── 코치/선수 & 팀코드 없음: 홈 레이아웃 안에 팀코드 입력 카드만 ── */
+        needTeamCode ? (
           <div style={{ padding: '36px 24px', maxWidth: 480, margin: '0 auto' }}>
             <div style={{ marginBottom: 28 }}>
               <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>팀 코드 입력</h1>
@@ -260,17 +342,20 @@ export default function Home() {
                 onClick={() => router.push('/admin')}
                 style={{
                   marginTop: 8, padding: '18px 22px', borderRadius: 20,
-                  border: '1.5px solid #ef444422',
-                  background: 'linear-gradient(135deg, #ef444411, #ef444406)',
+                  border: pendingCount > 0 ? '1.5px solid #f59e0b44' : '1.5px solid #ef444422',
+                  background: pendingCount > 0 ? 'linear-gradient(135deg, #f59e0b11, #f59e0b06)' : 'linear-gradient(135deg, #ef444411, #ef444406)',
                   color: '#f8fafc', cursor: 'pointer', textAlign: 'left',
                   display: 'flex', alignItems: 'center', gap: 18, width: '100%',
-                  boxShadow: '0 4px 24px #ef444411',
+                  boxShadow: pendingCount > 0 ? '0 4px 24px #f59e0b22' : '0 4px 24px #ef444411',
                 }}
               >
-                <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, background: '#ef444422', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>🛡️</div>
+                <div style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, background: pendingCount > 0 ? '#f59e0b22' : '#ef444422', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, position: 'relative' }}>
+                  🛡️
+                  {pendingCount > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{pendingCount}</span>}
+                </div>
                 <div>
                   <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>감독 관리</div>
-                  <div style={{ fontSize: 13, color: '#64748b' }}>멤버 확인 및 계정 관리</div>
+                  <div style={{ fontSize: 13, color: pendingCount > 0 ? '#f59e0b' : '#64748b' }}>{pendingCount > 0 ? `가입 요청 ${pendingCount}건 대기 중` : '멤버 확인 및 계정 관리'}</div>
                 </div>
                 <span style={{ marginLeft: 'auto', color: '#334155', fontSize: 18 }}>›</span>
               </button>

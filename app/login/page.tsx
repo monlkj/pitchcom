@@ -24,8 +24,12 @@ interface LocalUser {
   email: string;
   password: string;
   role: Role;
+  coachType?: string;
   teamCode: string;
+  joinApproved?: boolean;
 }
+
+const COACH_TYPES = ['수석코치', '타격코치', '투수코치', '주루코치', '배터리코치', '수비코치'];
 
 function getUsers(): LocalUser[] {
   try { return JSON.parse(localStorage.getItem('pitchcom-users') || '[]'); } catch { return []; }
@@ -34,7 +38,7 @@ function saveUsers(users: LocalUser[]) {
   localStorage.setItem('pitchcom-users', JSON.stringify(users));
 }
 function setSession(user: LocalUser) {
-  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, teamCode: user.teamCode, email: user.email }));
+  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved }));
 }
 
 const ROLES = [
@@ -46,14 +50,15 @@ const ROLES = [
 export default function LoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'login' | 'signup'>('login');
-  const [step, setStep] = useState<'info' | 'role'>('info');
+  const [step, setStep] = useState<'info' | 'role' | 'coachType'>('info');
+  const [pendingRole, setPendingRole] = useState<Role | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const resetSignup = () => { setStep('info'); setError(''); };
+  const resetSignup = () => { setStep('info'); setError(''); setPendingRole(null); };
 
   const handleLogin = async () => {
     setError('');
@@ -101,7 +106,12 @@ export default function LoginPage() {
     setStep('role');
   };
 
-  const handleRoleSelect = async (r: Role) => {
+  const handleRoleSelect = (r: Role) => {
+    if (r === 'coach') { setPendingRole(r); setStep('coachType'); return; }
+    createAccount(r);
+  };
+
+  const createAccount = async (r: Role, coachType?: string) => {
     setLoading(true);
     const users = getUsers();
     const newUser: LocalUser = {
@@ -110,7 +120,9 @@ export default function LoginPage() {
       email: email.trim(),
       password,
       role: r,
+      ...(coachType ? { coachType } : {}),
       teamCode: '',
+      joinApproved: r === 'manager' ? true : undefined,
     };
     const nextUsers = [...users, newUser];
     saveUsers(nextUsers);
@@ -223,6 +235,26 @@ export default function LoginPage() {
                   ))}
                 </div>
                 <button onClick={resetSignup} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
+              </div>
+            )}
+
+            {/* 회원가입 - 코치 유형 선택 */}
+            {tab === 'signup' && step === 'coachType' && (
+              <div>
+                <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:15, fontWeight:700, textAlign:'center' }}>코치 유형을 선택하세요</p>
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {COACH_TYPES.map(ct => (
+                    <button key={ct} className="role-btn" onClick={() => createAccount('coach', ct)} disabled={loading} style={{
+                      padding:'14px 20px', borderRadius:14, border:'1.5px solid #1e3a5f',
+                      background:'#0f172a', color:'#f8fafc', cursor:'pointer', textAlign:'left',
+                      display:'flex', alignItems:'center', gap:14, transition:'all 0.2s',
+                    }}>
+                      <span style={{ fontSize:22 }}>📋</span>
+                      <div style={{ fontSize:15, fontWeight:800 }}>{ct}</div>
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => { setStep('role'); setPendingRole(null); }} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
               </div>
             )}
           </div>
