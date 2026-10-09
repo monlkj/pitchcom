@@ -12,9 +12,16 @@ type AllBat = Record<string, BatStats>;
 type AllPit = Record<string, PitStats>;
 
 const POSITIONS = ['투수', '포수', '1루수', '2루수', '3루수', '유격수', '좌익수', '중견수', '우익수', 'DH'];
+const POS_ORDER = ['투수','포수','1루수','2루수','3루수','유격수','좌익수','중견수','우익수','DH'];
 const TABS = ['선수 관리', '타자 기록', '투수 기록', '타순', '로테이션'] as const;
 const EMPTY_BAT: BatStats = { pa: 0, ab: 0, h: 0, d: 0, t: 0, hr: 0, bb: 0, hbp: 0, rbi: 0, r: 0, so: 0 };
 const EMPTY_PIT: PitStats = { ip: 0, ha: 0, er: 0, bb: 0, k: 0, hbp: 0, hr: 0 };
+
+const sortPos = (positions: string[]) =>
+  [...positions].sort((a, b) => {
+    const ai = POS_ORDER.indexOf(a); const bi = POS_ORDER.indexOf(b);
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  });
 
 const fmt = (n: number, d = 3) => isNaN(n) || !isFinite(n) ? '—' : n.toFixed(d).replace(/^0\./, '.');
 const fmt2 = (n: number) => fmt(n, 2);
@@ -68,6 +75,8 @@ export default function TeamPage() {
   const [rotations, setRotations] = useState<Record<string, string[]>>({});
   const [pickingSlot, setPickingSlot] = useState<{ type: 'lineup'|'rotation'; idx: number } | null>(null);
   const [pickingPos, setPickingPos] = useState<number | null>(null);
+  const [playerSort, setPlayerSort] = useState<'가나다'|'번호'|'타율'|'장타율'|'OPS'|'출루율'|'ERA'|'K9'>('가나다');
+  const [statsTeam, setStatsTeam] = useState('all');
 
   useEffect(() => {
     const raw = localStorage.getItem('pitchcom-session');
@@ -148,6 +157,32 @@ export default function TeamPage() {
   const sortKo = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, 'ko');
   const allPlayers = teams.flatMap(t => [...t.players].sort(sortKo).map(p => ({ ...p, teamName: t.name })));
 
+  const sortedCurrentPlayers = (players: Player[]) => {
+    const arr = [...players];
+    switch (playerSort) {
+      case '가나다': return arr.sort(sortKo);
+      case '번호': return arr.sort((a, b) => (parseInt(a.number) || 999) - (parseInt(b.number) || 999));
+      case '타율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).avg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).avg || 0));
+      case '장타율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).slg || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).slg || 0));
+      case 'OPS': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).ops || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).ops || 0));
+      case '출루율': return arr.sort((a, b) => (calcBat(allBat[b.id] ?? EMPTY_BAT).obp || 0) - (calcBat(allBat[a.id] ?? EMPTY_BAT).obp || 0));
+      case 'ERA': return arr.sort((a, b) => {
+        const ea = calcPit(allPit[a.id] ?? EMPTY_PIT).era;
+        const eb = calcPit(allPit[b.id] ?? EMPTY_PIT).era;
+        if (isNaN(ea) && isNaN(eb)) return 0;
+        if (isNaN(ea)) return 1; if (isNaN(eb)) return -1;
+        return ea - eb;
+      });
+      case 'K9': return arr.sort((a, b) => (calcPit(allPit[b.id] ?? EMPTY_PIT).kper9 || 0) - (calcPit(allPit[a.id] ?? EMPTY_PIT).kper9 || 0));
+      default: return arr;
+    }
+  };
+
+  const filteredStatsPlayers = statsTeam === 'all' ? allPlayers : allPlayers.filter(p => {
+    const t = teams.find(t => t.players.some(pl => pl.id === p.id));
+    return t?.id === statsTeam;
+  });
+
   const bf = (k: keyof BatStats, v: string) => setBatForm(f => ({ ...f, [k]: Math.max(0, parseInt(v) || 0) }));
   const pf = (k: keyof PitStats, v: string) => setPitForm(f => ({ ...f, [k]: k === 'ip' ? Math.max(0, parseFloat(v) || 0) : Math.max(0, parseInt(v) || 0) }));
 
@@ -201,12 +236,22 @@ export default function TeamPage() {
 
           {currentTeam ? (
             <>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                 <span style={{ fontSize: 13, color: '#64748b', fontWeight: 700 }}>선수 {currentTeam.players.length}명</span>
                 {(isManager || isCoach) && (
                   <button onClick={() => { setAddingPlayer(true); setEditingPlayer(null); setPlayerForm({ name: '', number: '', position: [] }); }}
                     style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 선수 추가</button>
                 )}
+              </div>
+              {/* 정렬 기준 */}
+              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
+                {(['가나다','번호','타율','장타율','OPS','출루율','ERA','K9'] as const).map(s => (
+                  <button key={s} onClick={() => setPlayerSort(s)} style={{
+                    padding: '5px 10px', borderRadius: 14, border: 'none', fontSize: 11, fontWeight: 700, cursor: 'pointer',
+                    background: playerSort === s ? '#3b82f6' : '#1e293b',
+                    color: playerSort === s ? '#fff' : '#64748b',
+                  }}>{s}</button>
+                ))}
               </div>
 
               {(isManager || isCoach) && addingPlayer && (
@@ -235,15 +280,16 @@ export default function TeamPage() {
                 <div style={{ textAlign: 'center', padding: '48px 0', color: '#334155' }}><p style={{ margin: 0 }}>{(isManager || isCoach) ? '선수를 추가해보세요' : '등록된 선수가 없어요'}</p></div>
               ) : (
                 <div style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden' }}>
-                  {[...currentTeam.players].sort(sortKo).map((p, i) => {
+                  {sortedCurrentPlayers(currentTeam.players).map((p, i) => {
                     const isInlineEditing = editingPlayer?.id === p.id;
+                    const sortedPositions = sortPos(Array.isArray(p.position) ? p.position : [p.position]);
                     return (
                       <div key={p.id} style={{ borderBottom: i < currentTeam.players.length - 1 ? '1px solid #0f172a' : 'none' }}>
                         <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14 }}>
                           <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{p.name}</div>
-                            <div style={{ fontSize: 12, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{sortedPositions.join(' · ')}</div>
                           </div>
                           {(isManager || isCoach) && (
                             <>
@@ -290,22 +336,32 @@ export default function TeamPage() {
       {/* ─── 타자 기록 ─── */}
       {tab === '타자 기록' && (
         <>
-          {allPlayers.length === 0 ? (
+          {/* 팀 필터 */}
+          {teams.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              <button onClick={() => setStatsTeam('all')} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: statsTeam === 'all' ? '#3b82f6' : '#1e293b', color: statsTeam === 'all' ? '#fff' : '#94a3b8' }}>전체</button>
+              {teams.map(t => (
+                <button key={t.id} onClick={() => setStatsTeam(t.id)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: statsTeam === t.id ? '#3b82f6' : '#1e293b', color: statsTeam === t.id ? '#fff' : '#94a3b8' }}>{t.name}</button>
+              ))}
+            </div>
+          )}
+          {filteredStatsPlayers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>🏏</div>
               <p style={{ margin: 0 }}>선수 관리 탭에서 선수를 먼저 추가해주세요</p>
             </div>
-          ) : allPlayers.map(p => {
+          ) : filteredStatsPlayers.map(p => {
             const s = allBat[p.id] ?? EMPTY_BAT;
             const c = calcBat(s);
             const isEditing = editingId === p.id;
+            const sortedPositions = sortPos(Array.isArray(p.position) ? p.position : [p.position]);
             return (
               <div key={p.id} style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
                 <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #0f172a' }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{sortedPositions.join(' · ')} · {p.teamName}</div>
                   </div>
                   {(isManager || isCoach) && (
                     <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setBatForm(allBat[p.id] ?? { ...EMPTY_BAT }); } }} style={{
@@ -359,22 +415,32 @@ export default function TeamPage() {
       {/* ─── 투수 기록 ─── */}
       {tab === '투수 기록' && (
         <>
-          {allPlayers.length === 0 ? (
+          {/* 팀 필터 */}
+          {teams.length > 1 && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 16 }}>
+              <button onClick={() => setStatsTeam('all')} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: statsTeam === 'all' ? '#f97316' : '#1e293b', color: statsTeam === 'all' ? '#fff' : '#94a3b8' }}>전체</button>
+              {teams.map(t => (
+                <button key={t.id} onClick={() => setStatsTeam(t.id)} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', fontSize: 12, fontWeight: 700, cursor: 'pointer', background: statsTeam === t.id ? '#f97316' : '#1e293b', color: statsTeam === t.id ? '#fff' : '#94a3b8' }}>{t.name}</button>
+              ))}
+            </div>
+          )}
+          {filteredStatsPlayers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>⚾</div>
               <p style={{ margin: 0 }}>선수 관리 탭에서 선수를 먼저 추가해주세요</p>
             </div>
-          ) : allPlayers.map(p => {
+          ) : filteredStatsPlayers.map(p => {
             const s = allPit[p.id] ?? EMPTY_PIT;
             const c = calcPit(s);
             const isEditing = editingId === p.id;
+            const sortedPositions = sortPos(Array.isArray(p.position) ? p.position : [p.position]);
             return (
               <div key={p.id} style={{ background: '#1e293b', borderRadius: 16, overflow: 'hidden', marginBottom: 12 }}>
                 <div style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 12, borderBottom: '1px solid #0f172a' }}>
                   <div style={{ width: 36, height: 36, borderRadius: 10, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 900, color: '#94a3b8' }}>{p.number || '—'}</div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{p.name}</div>
-                    <div style={{ fontSize: 11, color: '#64748b' }}>{(Array.isArray(p.position) ? p.position : [p.position]).join(' · ')} · {p.teamName}</div>
+                    <div style={{ fontSize: 11, color: '#64748b' }}>{sortedPositions.join(' · ')} · {p.teamName}</div>
                   </div>
                   {(isManager || isCoach) && (
                     <button onClick={() => { if (isEditing) { setEditingId(''); } else { setEditingId(p.id); setPitForm(allPit[p.id] ?? { ...EMPTY_PIT }); } }} style={{
