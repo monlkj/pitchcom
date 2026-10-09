@@ -11,15 +11,15 @@ interface Formation { id: string; name: string; slots: Record<string, string>; }
 const POS_KEYS = ['투수', '포수', '1루수', '2루수', '3루수', '유격수', '좌익수', '중견수', '우익수', 'DH'];
 
 const POS_COORDS: Record<string, [number, number]> = {
-  '투수':  [280, 232],
-  '포수':  [280, 358],
-  '1루수': [388, 258],
-  '2루수': [336, 166],
-  '3루수': [172, 258],
-  '유격수':[224, 166],
-  '좌익수':[118, 82],
-  '중견수':[280, 54],
-  '우익수':[442, 82],
+  '투수':  [280, 238],
+  '포수':  [280, 352],
+  '1루수': [392, 262],
+  '2루수': [342, 162],
+  '3루수': [168, 262],
+  '유격수':[218, 162],
+  '좌익수':[108, 76],
+  '중견수':[280, 52],
+  '우익수':[452, 76],
 };
 
 const POS_ABBR: Record<string, string> = {
@@ -229,31 +229,31 @@ export default function FieldPage() {
               return (
                 <g key={pos} onClick={() => canEdit && setPickingPos(isActive ? '' : pos)} style={{ cursor: canEdit ? 'pointer' : 'default' }}>
                   {/* 글로우 */}
-                  {isActive && <circle cx={cx} cy={cy} r="34" fill="#3b82f620" />}
+                  {isActive && <circle cx={cx} cy={cy} r="40" fill="#3b82f618" />}
                   {/* 배경 원 */}
-                  <circle cx={cx} cy={cy} r="26"
-                    fill={isActive ? '#1e3a5f' : player ? '#0f2a4a' : '#00000050'}
-                    stroke={isActive ? '#60a5fa' : player ? '#3b82f688' : '#ffffff22'}
-                    strokeWidth={isActive ? 2 : 1.5}
+                  <circle cx={cx} cy={cy} r="30"
+                    fill={isActive ? '#1e3a5f' : player ? '#0f2a4a' : '#00000060'}
+                    stroke={isActive ? '#60a5fa' : player ? '#3b82f6aa' : '#ffffff30'}
+                    strokeWidth={isActive ? 2.5 : 2}
                   />
                   {player ? (
                     <>
-                      <text x={cx} y={cy - 6} textAnchor="middle" fill="#93c5fd" fontSize="11" fontWeight="800">#{player.number || '?'}</text>
-                      <text x={cx} y={cy + 8} textAnchor="middle" fill="#f8fafc" fontSize="12" fontWeight="800">
+                      <text x={cx} y={cy - 5} textAnchor="middle" fill="#7dd3fc" fontSize="13" fontWeight="700">#{player.number || '?'}</text>
+                      <text x={cx} y={cy + 13} textAnchor="middle" fill="#ffffff" fontSize="16" fontWeight="900">
                         {player.name.length > 3 ? player.name.slice(0, 3) : player.name}
                       </text>
                     </>
                   ) : (
                     <>
-                      <text x={cx} y={cy - 2} textAnchor="middle" fill="#ffffff50" fontSize="11" fontWeight="700">{abbr}</text>
-                      <text x={cx} y={cy + 10} textAnchor="middle" fill="#ffffff30" fontSize="9">{pos}</text>
+                      <text x={cx} y={cy + 3} textAnchor="middle" fill="#ffffff60" fontSize="16" fontWeight="800">{abbr}</text>
+                      <text x={cx} y={cy + 18} textAnchor="middle" fill="#ffffff35" fontSize="11">{pos}</text>
                     </>
                   )}
                   {/* 삭제 버튼 */}
                   {canEdit && player && (
                     <g onClick={ev => { ev.stopPropagation(); removeSlot(pos); }}>
-                      <circle cx={cx + 20} cy={cy - 20} r="9" fill="#ef4444cc" />
-                      <text x={cx + 20} y={cy - 16} textAnchor="middle" fill="#fff" fontSize="11" fontWeight="900">×</text>
+                      <circle cx={cx + 24} cy={cy - 22} r="10" fill="#ef4444dd" />
+                      <text x={cx + 24} y={cy - 17} textAnchor="middle" fill="#fff" fontSize="13" fontWeight="900">×</text>
                     </g>
                   )}
                 </g>
