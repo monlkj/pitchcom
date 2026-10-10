@@ -32,10 +32,10 @@ export default function SpeedgunPage() {
 
   if (!ready) return <p style={{ padding: 24 }}>로그인 상태 확인 중…</p>;
   return (
-    <main style={{ minHeight: '100dvh', background: '#f5f6f2' }}>
-      <header style={{ padding: '18px 24px', borderBottom: '1px solid #e4e9e1', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, color: '#173c2b', background: '#fff', fontSize: 13 }}>
-        <Link href="/" style={{ fontWeight: 700 }}>← PitchCom 홈</Link>
-        <span style={{ color: '#6b7b73', fontSize: 12 }}>PERFORMANCE LAB</span>
+    <main style={{ minHeight: '100dvh', background: '#0f172a' }}>
+      <header style={{ padding: '18px 24px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, color: '#f8fafc', background: '#0f172a', fontSize: 13 }}>
+        <Link href="/" style={{ fontWeight: 700 }}>← 홈으로</Link>
+        
       </header>
       <iframe ref={frameRef} src="/speedgun.html" title="투구 영상 구속 측정기" style={{ display: 'block', width: '100%', height: frameHeight, border: 0 }} />
     </main>
