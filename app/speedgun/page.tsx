@@ -34,7 +34,7 @@ export default function SpeedgunPage() {
   return (
     <main style={{ minHeight: '100dvh', background: '#0f172a' }}>
       <header style={{ padding: '18px 24px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, color: '#f8fafc', background: '#0f172a', fontSize: 13 }}>
-        <Link href="/" style={{ fontWeight: 700 }}>← 홈으로</Link>
+        <Link href="/" aria-label="홈으로 돌아가기" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, color: '#64748b', fontSize: 28 }}>←</Link>
 
       </header>
       <iframe ref={frameRef} src="/speedgun.html" title="투구 영상 구속 측정기" style={{ display: 'block', width: '100%', height: frameHeight, border: 0 }} />
