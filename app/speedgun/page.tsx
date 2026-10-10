@@ -33,7 +33,7 @@ export default function SpeedgunPage() {
   if (!ready) return <p style={{ padding: 24 }}>로그인 상태 확인 중…</p>;
   return (
     <main style={{ minHeight: '100dvh', background: '#0f172a' }}>
-      <header style={{ padding: '8px 16px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, color: '#f8fafc', background: '#0f172a', fontSize: 13 }}>
+      <header style={{ position: 'sticky', top: 0, zIndex: 10, padding: '8px 16px', borderBottom: '1px solid #1e293b', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, color: '#f8fafc', background: '#0f172a', fontSize: 13 }}>
         <Link href="/" aria-label="홈으로 돌아가기" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 44, height: 44, color: '#64748b', fontSize: 28 }}>←</Link>
 
       </header>
