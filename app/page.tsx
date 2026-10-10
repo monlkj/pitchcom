@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
 
 const MENUS = [
+  { href: '/speedgun', emoji: '⚾', label: '구속 측정', desc: '투구 영상으로 평균 구속 측정', color: '#22c55e' },
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
   { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록·기록 관리', color: '#f59e0b' },
   { href: '/stats', emoji: '📊', label: '투구 통계', desc: '타자·투수 기록 조회 및 분석', color: '#ef4444' },
