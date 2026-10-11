@@ -1,11 +1,12 @@
-// PitchCom USB buttons: each button connects D2..D6 to GND.
-// No buzzer or external pull-up resistors are needed.
-// Upload to Arduino Uno, close Serial Monitor, connect in desktop Chrome/Edge.
-const byte COUNT = 5;
-const byte pins[COUNT] = {2, 3, 4, 5, 6};
+// D2: select pitch by press count (1..5, then wrap to 1).
+// D3: send selected pitch, then reset. Other buttons are unused.
+// Connect each button between its pin and GND. No buzzer needed.
+const byte COUNT = 2;
+const byte pins[COUNT] = {2, 3};
 int lastReading[COUNT];
 int stableState[COUNT];
 unsigned long changedAt[COUNT];
+byte selected = 0;
 void setup() {
   Serial.begin(9600);
   for (byte i = 0; i < COUNT; i++) {
@@ -15,6 +16,7 @@ void setup() {
     changedAt[i] = 0;
   }
   Serial.println("READY");
+  Serial.println("SELECT:0");
 }
 void loop() {
   unsigned long now = millis();
@@ -27,8 +29,16 @@ void loop() {
     if (now - changedAt[i] >= 30 && reading != stableState[i]) {
       stableState[i] = reading;
       if (stableState[i] == LOW) {
-        Serial.print("PITCH:");
-        Serial.println(i + 1);
+        if (i == 0) {
+          selected = selected % 5 + 1;
+          Serial.print("SELECT:");
+          Serial.println(selected);
+        } else if (selected > 0) {
+          Serial.print("SEND:");
+          Serial.println(selected);
+          selected = 0;
+          Serial.println("SELECT:0");
+        }
       }
     }
   }
