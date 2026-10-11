@@ -18,13 +18,16 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
   const [state, setState] = useState<'idle' | 'connecting' | 'connected'>('idle');
   const [message, setMessage] = useState('USB로 우노를 연결한 뒤 연결 버튼을 누르세요.');
   const [selection, setSelection] = useState(0);
-  const [mapping, setMapping] = useState<string[]>([]);
+  const selectionRef = useRef(0);
   const active = useRef(true);
   const portRef = useRef<Port | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
   const stopRef = useRef(false);
-  const latest = useRef({ pitches, onPitch, disabled, mapping });
-  latest.current = { pitches, onPitch, disabled, mapping };
+  const latest = useRef({ pitches, onPitch, disabled });
+  latest.current = { pitches, onPitch, disabled };
+
+  const pitchOrder = JSON.stringify(pitches);
+  useEffect(() => { selectionRef.current = 0; setSelection(0); }, [pitchOrder]);
 
   useEffect(() => {
     active.current = true;
@@ -66,26 +69,34 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
         while ((end = buffer.indexOf('\n')) >= 0) {
           const line = buffer.slice(0, end).trim();
           buffer = buffer.slice(end + 1);
-          const match = /^(SELECT|SEND|PITCH):([0-5])$/.exec(line);
-          if (!match || !active.current) continue;
+          if (!active.current) continue;
           const current = latest.current;
-          const count = Number(match[2]);
-          if (match[1] === 'SELECT' && count === 0) { setSelection(0); continue; }
-          if (count === 0) continue;
-          const index = count - 1;
-          const pitch = current.mapping[index] !== undefined ? current.mapping[index] : current.pitches[index];
-          if (current.disabled || !pitch || !current.pitches.includes(pitch)) {
-            setMessage('투수를 선택하고 버튼별 구종을 확인하세요. 편집 중에는 입력하지 않습니다.');
+          const legacy = /^(SELECT|SEND|PITCH):([0-9]+)$/.exec(line);
+          const selecting = line === 'NEXT' || legacy?.[1] === 'SELECT';
+          const sending = line === 'SEND' || legacy?.[1] === 'SEND' || legacy?.[1] === 'PITCH';
+          if (!selecting && !sending) continue;
+          if (current.disabled || current.pitches.length === 0) {
+            selectionRef.current = 0; setSelection(0);
+            setMessage('투수를 선택하고 구종을 등록하세요. 편집 중에는 입력하지 않습니다.');
             continue;
           }
-          if (match[1] === 'SELECT') {
-            setSelection(count);
-            setMessage(`${count}회 · ${pitch} 선택됨. 2번 버튼을 누르면 전송합니다.`);
+          let count = selectionRef.current;
+          if (line === 'NEXT') count = count % current.pitches.length + 1;
+          else if (legacy) {
+            const raw = Number(legacy[2]);
+            if (!Number.isSafeInteger(raw)) continue;
+            count = raw === 0 ? 0 : (raw - 1) % current.pitches.length + 1;
+          }
+          if (selecting) {
+            selectionRef.current = count; setSelection(count);
+            if (count) setMessage(`${count}번 · ${current.pitches[count - 1]} 선택됨. 2번 버튼을 누르면 전송합니다.`);
             continue;
           }
-          setSelection(0);
+          if (count === 0) { setMessage('1번 버튼으로 먼저 구종을 선택하세요.'); continue; }
+          const pitch = current.pitches[count - 1];
+          selectionRef.current = 0; setSelection(0);
           current.onPitch(pitch);
-          setMessage(`${index + 1}번 구종 · ${pitch} 음성 요청`);
+          setMessage(`${count}번 구종 · ${pitch} 음성 요청`);
         }
         if (buffer.length > 256) buffer = '';
       }
@@ -103,7 +114,7 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
       readerRef.current = null;
       if (port && opened) { try { await port.close(); } catch {} }
       portRef.current = null;
-      if (active.current) { setState('idle'); setSelection(0); }
+      if (active.current) { setState('idle'); selectionRef.current = 0; setSelection(0); }
     }
   };
 
@@ -129,14 +140,10 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
       <button onClick={testAudio} style={{ padding: '11px 12px', borderRadius: 9, border: '1px solid #475569', background: 'transparent', color: '#bfdbfe', cursor: 'pointer' }}>이어폰 테스트</button>
     </div>
     <p role="status" aria-live="polite" style={{ margin: '10px 0', color: '#93c5fd', fontSize: 12, lineHeight: 1.7 }}>{supported ? message : 'USB 연결은 컴퓨터 Chrome·Edge에서 사용하세요. 팅커캐드 가상 버튼은 연결되지 않습니다.'}</p>
-    <p style={{ color: '#f8fafc', fontSize: 13, marginBottom: 12 }}>선택 횟수: {selection} / 5 · 1번(D2) 선택 · 2번(D3) 보내기</p>
+    <p style={{ color: '#f8fafc', fontSize: 13, marginBottom: 12 }}>선택 구종: {selection} / {pitches.length} · 1번(D2) 선택 · 2번(D3) 보내기</p>
     <details><summary style={{ color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>횟수별 구종 · 설치 안내</summary>
-      {[0, 1, 2, 3, 4].map(i => <label key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, color: '#cbd5e1', fontSize: 12 }}>{i + 1}회 누르기
-        <select aria-label={`${i + 1}회 구종`} value={mapping[i] !== undefined ? (pitches.includes(mapping[i]) ? mapping[i] : '') : pitches[i] || ''} onChange={e => setMapping(previous => { const next = [...previous]; next[i] = e.target.value; return next; })} style={{ flex: 1, minWidth: 0, padding: 8, borderRadius: 7, background: '#0f172a', color: '#f8fafc', border: '1px solid #334155' }}>
-          <option value="">구종 없음</option>{pitches.map((pitch, index) => <option key={`${pitch}-${index}`} value={pitch}>{pitch}</option>)}
-        </select>
-      </label>)}
-      <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.8, marginTop: 12 }}>1번 버튼은 D2와 GND, 2번 버튼은 D3와 GND에 연결하세요. 나머지 버튼은 사용하지 않습니다. 1번은 누른 횟수로 1~5번 구종을 선택하며 6번째에는 1번으로 돌아갑니다. 2번은 음성을 전송하고 횟수를 초기화합니다. 선택 없이 보내기를 누르면 아무 동작도 하지 않습니다. 부저는 필요 없습니다. 아래 코드를 실제 우노에 업로드하고 시리얼 모니터를 닫은 뒤 연결하세요. 버튼 입력은 화면의 구종 버튼과 같은 음성 동작을 실행합니다.</p>
+      <ol style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 2, paddingLeft: 22 }}>{pitches.map((pitch, i) => <li key={`${pitch}-${i}`}>{pitch}</li>)}</ol>
+      <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.8, marginTop: 12 }}>1번 버튼은 D2와 GND, 2번 버튼은 D3와 GND에 연결하세요. 나머지 버튼은 사용하지 않습니다. 1번을 누를 때마다 위 순서대로 선택합니다. 구종 개수를 넘으면 다시 1번으로 돌아갑니다. 편집 화면에서 구종을 드래그하면 버튼 선택 순서도 바뀝니다. 순서를 바꾸거나 투수를 바꾸면 선택은 초기화됩니다. 2번은 음성을 전송하고 횟수를 초기화합니다. 선택 없이 보내기를 누르면 아무 동작도 하지 않습니다. 부저는 필요 없습니다. 아래 코드를 실제 우노에 업로드하고 시리얼 모니터를 닫은 뒤 연결하세요. 버튼 입력은 화면의 구종 버튼과 같은 음성 동작을 실행합니다.</p>
       <a href="/arduino/pitchcom-buttons.ino" download style={{ display: 'inline-block', color: '#60a5fa', fontSize: 13, padding: '12px 0' }}>우노 코드 다운로드 (.ino)</a>
     </details>
   </section>;

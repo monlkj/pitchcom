@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 import ArduinoButtons from './components/ArduinoButtons';
+import PitchDragHandle from './components/PitchDragHandle';
 
 const COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 
@@ -108,6 +109,16 @@ export default function SignalPage() {
       p.id === selectedId ? { ...p, pitches: p.pitches.filter(x => x !== pitch) } : p
     );
     save(next);
+  };
+
+  const movePitch = (from: number, to: number) => {
+    if (!(isManager || isCoach)) return;
+    const owner = pitchers.find(p => p.id === selectedId);
+    if (!owner || from === to || to < 0 || from < 0 || to >= owner.pitches.length || from >= owner.pitches.length) return;
+    const order = [...owner.pitches];
+    const [pitch] = order.splice(from, 1);
+    order.splice(to, 0, pitch);
+    save(pitchers.map(p => p.id === selectedId ? { ...p, pitches: order } : p));
   };
 
   const sendSignal = (pitch: string) => {
@@ -222,15 +233,17 @@ export default function SignalPage() {
       {/* 편집 모드 (감독/코치) */}
       {editMode && (isManager || isCoach) && current && (
         <div style={{ background: '#1e293b', borderRadius: 16, padding: '16px', marginBottom: 14 }}>
-          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>{current.name}의 구종</p>
+          <p style={{ margin: '0 0 12px', fontSize: 13, color: '#94a3b8', fontWeight: 700 }}>{current.name}의 구종 · ⠿를 끌어 순서 변경</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
             {current.pitches.map((pitch, i) => (
-              <div key={pitch} style={{
+              <div key={pitch} data-pitch-order={i} style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '11px 14px', borderRadius: 12,
                 background: '#0f172a', border: `1.5px solid ${pitchColor(i)}44`,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <PitchDragHandle index={i} name={pitch} onMove={movePitch} />
+                  <span style={{ color: '#64748b', fontSize: 12 }}>{i + 1}</span>
                   <div style={{ width: 10, height: 10, borderRadius: '50%', background: pitchColor(i), flexShrink: 0 }} />
                   <span style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{pitch}</span>
                 </div>
