@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
+import ArduinoButtons from './components/ArduinoButtons';
 
 const COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#06b6d4','#ec4899','#14b8a6','#f43f5e'];
 
@@ -163,6 +164,8 @@ export default function SignalPage() {
           <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569', padding: '5px 10px', borderRadius: 8, border: '1px solid #1e293b' }}>읽기 전용</span>
         )}
       </div>
+
+      <ArduinoButtons pitches={current?.pitches ?? []} onPitch={sendSignal} disabled={!current || editMode || !('speechSynthesis' in globalThis)} />
 
       {/* 투수 드롭다운 */}
       <div style={{ position: 'relative', marginBottom: 14 }}>
