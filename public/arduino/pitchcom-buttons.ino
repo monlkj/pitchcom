@@ -1,8 +1,8 @@
 // D2: select next pitch. The web app wraps at its current pitch count.
-// D3: send selected pitch, then reset. Other buttons are unused.
+// D3: send selected pitch; D4: reset selection to zero.
 // Connect each button between its pin and GND. No buzzer needed.
-const byte COUNT = 2;
-const byte pins[COUNT] = {2, 3};
+const byte COUNT = 3;
+const byte pins[COUNT] = {2, 3, 4};
 int lastReading[COUNT];
 int stableState[COUNT];
 unsigned long changedAt[COUNT];
@@ -27,7 +27,9 @@ void loop() {
     if (now - changedAt[i] >= 30 && reading != stableState[i]) {
       stableState[i] = reading;
       if (stableState[i] == LOW) {
-        Serial.println(i == 0 ? "NEXT" : "SEND");
+        if (i == 0) Serial.println("NEXT");
+        else if (i == 1) Serial.println("SEND");
+        else Serial.println("RESET");
       }
     }
   }

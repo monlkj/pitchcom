@@ -58,7 +58,7 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
       reader = port.readable.getReader();
       readerRef.current = reader;
       setState('connected');
-      setMessage('연결됨 · 1번으로 구종 선택, 2번으로 음성 전송');
+      setMessage('연결됨 · 1번 선택 · 2번 전송 · 3번 초기화');
       const decoder = new TextDecoder();
       let buffer = '';
       while (!stopRef.current) {
@@ -70,6 +70,11 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
           const line = buffer.slice(0, end).trim();
           buffer = buffer.slice(end + 1);
           if (!active.current) continue;
+          if (line === 'RESET') {
+            selectionRef.current = 0; setSelection(0);
+            setMessage('선택을 초기화했습니다. 1번 버튼으로 다시 선택하세요.');
+            continue;
+          }
           const current = latest.current;
           const legacy = /^(SELECT|SEND|PITCH):([0-9]+)$/.exec(line);
           const selecting = line === 'NEXT' || legacy?.[1] === 'SELECT';
@@ -140,10 +145,10 @@ export default function ArduinoButtons({ pitches, onPitch, disabled }: {
       <button onClick={testAudio} style={{ padding: '11px 12px', borderRadius: 9, border: '1px solid #475569', background: 'transparent', color: '#bfdbfe', cursor: 'pointer' }}>이어폰 테스트</button>
     </div>
     <p role="status" aria-live="polite" style={{ margin: '10px 0', color: '#93c5fd', fontSize: 12, lineHeight: 1.7 }}>{supported ? message : 'USB 연결은 컴퓨터 Chrome·Edge에서 사용하세요. 팅커캐드 가상 버튼은 연결되지 않습니다.'}</p>
-    <p style={{ color: '#f8fafc', fontSize: 13, marginBottom: 12 }}>선택 구종: {selection} / {pitches.length} · 1번(D2) 선택 · 2번(D3) 보내기</p>
+    <p style={{ color: '#f8fafc', fontSize: 13, marginBottom: 12 }}>선택 구종: {selection} / {pitches.length} · 1번(D2) 선택 · 2번(D3) 보내기 · 3번(D4) 초기화</p>
     <details><summary style={{ color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>횟수별 구종 · 설치 안내</summary>
       <ol style={{ color: '#cbd5e1', fontSize: 13, lineHeight: 2, paddingLeft: 22 }}>{pitches.map((pitch, i) => <li key={`${pitch}-${i}`}>{pitch}</li>)}</ol>
-      <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.8, marginTop: 12 }}>1번 버튼은 D2와 GND, 2번 버튼은 D3와 GND에 연결하세요. 나머지 버튼은 사용하지 않습니다. 1번을 누를 때마다 위 순서대로 선택합니다. 구종 개수를 넘으면 다시 1번으로 돌아갑니다. 편집 화면에서 구종을 드래그하면 버튼 선택 순서도 바뀝니다. 순서를 바꾸거나 투수를 바꾸면 선택은 초기화됩니다. 2번은 음성을 전송하고 횟수를 초기화합니다. 선택 없이 보내기를 누르면 아무 동작도 하지 않습니다. 부저는 필요 없습니다. 아래 코드를 실제 우노에 업로드하고 시리얼 모니터를 닫은 뒤 연결하세요. 버튼 입력은 화면의 구종 버튼과 같은 음성 동작을 실행합니다.</p>
+      <p style={{ fontSize: 12, color: '#94a3b8', lineHeight: 1.8, marginTop: 12 }}>1번 버튼은 D2와 GND, 2번 버튼은 D3와 GND, 3번 초기화 버튼은 D4와 GND에 연결하세요. 나머지 버튼은 사용하지 않습니다. 1번을 누를 때마다 위 순서대로 선택합니다. 구종 개수를 넘으면 다시 1번으로 돌아갑니다. 편집 화면에서 구종을 드래그하면 버튼 선택 순서도 바뀝니다. 순서를 바꾸거나 투수를 바꾸면 선택은 초기화됩니다. 2번은 음성을 전송하고 횟수를 초기화합니다. 선택 없이 보내기를 누르면 아무 동작도 하지 않습니다. 부저는 필요 없습니다. 아래 코드를 실제 우노에 업로드하고 시리얼 모니터를 닫은 뒤 연결하세요. 버튼 입력은 화면의 구종 버튼과 같은 음성 동작을 실행합니다.</p>
       <a href="/arduino/pitchcom-buttons.ino" download style={{ display: 'inline-block', color: '#60a5fa', fontSize: 13, padding: '12px 0' }}>우노 코드 다운로드 (.ino)</a>
     </details>
   </section>;
