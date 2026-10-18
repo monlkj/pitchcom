@@ -39,6 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [kickingId, setKickingId] = useState('');
   const [deletingId, setDeletingId] = useState('');
   const [deleteError, setDeleteError] = useState('');
   const [myId, setMyId] = useState('');
@@ -131,14 +132,22 @@ export default function AdminPage() {
     finally { setCoachSaving(false); }
   };
 
-  const kickMember = (member: Member) => {
-    if (member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
-    if (!confirm(`${member.name}님을 팀에서 내보낼까요?\n(계정은 유지되지만 팀 코드가 초기화돼요)`)) return;
-    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const updated = users.map(u => u.id === member.id ? { ...u, teamCode: '' } : u);
-    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
-    syncWrite('__global__', 'users', updated);
-    loadMembers(teamCode);
+  const kickMember = async (member: Member) => {
+    if (kickingId || member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
+    if (!confirm(`${member.name}님을 팀에서 내보낼까요?\n계정은 유지되며, 내보내기 알림이 전달됩니다.`)) return;
+    setKickingId(member.id); setDeleteError('');
+    try {
+      const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
+      if (!users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('권한 변경');
+      if (!users.some(u => u.id === member.id && u.teamCode === teamCode)) throw new Error('팀원 변경');
+      const removalNotice = { id: crypto.randomUUID(), teamCode, createdAt: new Date().toISOString() };
+      const updated = users.map(u => (u.id === member.id || (normalizedEmail(member.email) && normalizedEmail(u.email) === normalizedEmail(member.email))) && u.teamCode === teamCode
+        ? { ...u, teamCode: '', joinApproved: false, joinRequestId: undefined, removalNotice } : u);
+      await syncWrite('__global__', 'users', updated, true);
+      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+      await loadMembers(teamCode);
+    } catch { setDeleteError('내보내기를 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.'); }
+    finally { setKickingId(''); }
   };
 
   const deleteAccount = async (member: Member) => {
@@ -251,16 +260,16 @@ export default function AdminPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{m.name}</div>
-                  <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
+                  <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
                 <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
-                  <button onClick={() => kickMember(m)} style={{
+                  <button disabled={Boolean(kickingId || deletingId)} onClick={() => kickMember(m)} style={{
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #f59e0b33',
                     background: 'transparent', color: '#f59e0b', fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   }}>내보내기</button>
-                  <button disabled={Boolean(deletingId)} onClick={() => deleteAccount(m)} style={{
+                  <button disabled={Boolean(deletingId || kickingId)} onClick={() => deleteAccount(m)} style={{
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #ef444433',
                     background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   }}>삭제</button>

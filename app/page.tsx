@@ -18,6 +18,7 @@ const MENUS = [
 
 export default function Home() {
   const router = useRouter();
+  const [removalNotice, setRemovalNotice] = useState<{ id: string; teamCode: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
   const [userRole, setUserRole] = useState('');
@@ -60,6 +61,7 @@ export default function Home() {
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
     migrateTeamCache();
+    if (session.removalNotice && localStorage.getItem(`pitchcomDismissedRemoval:${session.id}`) !== session.removalNotice.id) setRemovalNotice(session.removalNotice);
     setPendingCount(0);
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
@@ -170,6 +172,12 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {removalNotice && <section role="alert" style={{ maxWidth: 480, margin: '20px auto', padding: '16px 20px', border: '1px solid #f59e0b66', borderRadius: 14, background: '#332812', color: '#fde68a' }}>
+          <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{removalNotice.teamCode}팀에서 내보내졌습니다.</p>
+          <p style={{ margin: '8px 0', fontSize: 12, lineHeight: 1.7 }}>계정은 유지됩니다. 다시 팀에 가입하려면 팀 코드를 입력하고 감독의 승인을 받아 주세요.</p>
+          <button onClick={() => { const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}'); localStorage.setItem(`pitchcomDismissedRemoval:${session.id}`, removalNotice.id); setRemovalNotice(null); }} style={{ padding: '8px 14px', border: '1px solid #f59e0b66', borderRadius: 8, background: 'transparent', color: '#fde68a', cursor: 'pointer' }}>확인</button>
+        </section>}
 
         {/* ── 가입 승인 대기 화면 ── */}
         {isPending ? (

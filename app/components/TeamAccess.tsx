@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { syncRead } from '../../lib/teamSync';
 import { refreshDeletedAccounts } from '../../lib/accountDeletion';
 import { migrateTeamCache } from '../../lib/teamStorage';
 
@@ -25,13 +26,22 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
       if (checking) return;
       checking = true;
       try {
-        const session = JSON.parse(localStorage.getItem('pitchcom-session') || 'null');
+        const rawSession = localStorage.getItem('pitchcom-session');
+        const session = JSON.parse(rawSession || 'null');
         if (!session) { if (active) router.replace('/login'); return; }
         const deleted = await refreshDeletedAccounts();
         if (!active) return;
         if (deleted.has(session.id)) {
           localStorage.removeItem('pitchcom-session');
           setAllowedPath(''); router.replace('/login'); return;
+        }
+        const users = await syncRead('__global__', 'users', true);
+        if (!active || localStorage.getItem('pitchcom-session') !== rawSession) return;
+        const remote = Array.isArray(users) ? users.find((user: { id: string }) => user.id === session.id) : null;
+        if (remote && (session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.removalNotice?.id !== remote.removalNotice?.id)) {
+          migrateTeamCache();
+          localStorage.setItem('pitchcom-session', JSON.stringify({ ...session, teamCode: remote.teamCode, joinApproved: remote.joinApproved, joinRequestId: remote.joinRequestId, removalNotice: remote.removalNotice }));
+          window.location.assign('/'); return;
         }
         migrateTeamCache();
         if (path !== '/' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
