@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import AccountDeletionForm from './components/AccountDeletionForm';
 import { markAccountsDeleted, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
 import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
@@ -279,6 +280,8 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      <AccountDeletionForm onDeleted={() => loadMembers(teamCode)} />
 
       {editingCoach && <section style={{ padding: 18, marginTop: 16, borderRadius: 14, background: '#1e293b', border: '1px solid #3b82f6' }}>
         <h2 style={{ fontSize: 15, color: '#f8fafc', marginBottom: 12 }}>{members.find(m => m.id === editingCoach)?.name} · 코치 유형 변경</h2>
