@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
+import { COACH_TYPES } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
 
 const GLOBAL = '__global__';
@@ -26,13 +27,13 @@ interface LocalUser {
   password: string;
   role: Role;
   coachType?: string;
+  coachTypes?: string[];
   teamCode: string;
   joinApproved?: boolean;
   joinRequestId?: string;
   managedTeamCodes?: string[];
 }
 
-const COACH_TYPES = ['수석코치', '타격코치', '투수코치', '주루코치', '배터리코치', '수비코치'];
 
 function getUsers(): LocalUser[] {
   try { return JSON.parse(localStorage.getItem('pitchcom-users') || '[]'); } catch { return []; }
@@ -42,7 +43,7 @@ function saveUsers(users: LocalUser[]) {
 }
 function setSession(user: LocalUser) {
   migrateTeamCache();
-  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes }));
+  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes }));
 }
 
 const ROLES = [
@@ -55,6 +56,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [step, setStep] = useState<'info' | 'role' | 'coachType'>('info');
+  const [selectedCoachTypes, setSelectedCoachTypes] = useState<string[]>([]);
   const [pendingRole, setPendingRole] = useState<Role | null>(null);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -106,7 +108,7 @@ export default function LoginPage() {
     createAccount(r);
   };
 
-  const createAccount = async (r: Role, coachType?: string) => {
+  const createAccount = async (r: Role, coachTypes: string[] = []) => {
     setLoading(true);
     const users = getUsers();
     const newUser: LocalUser = {
@@ -115,7 +117,7 @@ export default function LoginPage() {
       email: email.trim(),
       password,
       role: r,
-      ...(coachType ? { coachType } : {}),
+      ...(r === 'coach' ? { coachTypes, coachType: coachTypes.join(' · ') } : {}),
       teamCode: '',
       joinApproved: r === 'manager' ? true : undefined,
     };
@@ -236,12 +238,12 @@ export default function LoginPage() {
             {/* 회원가입 - 코치 유형 선택 */}
             {tab === 'signup' && step === 'coachType' && (
               <div>
-                <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:15, fontWeight:700, textAlign:'center' }}>코치 유형을 선택하세요</p>
+                <p style={{ margin:'0 0 16px', color:'#94a3b8', fontSize:15, fontWeight:700, textAlign:'center' }}>코치 유형을 선택하세요 (여러 개 선택 가능)</p>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {COACH_TYPES.map(ct => (
-                    <button key={ct} className="role-btn" onClick={() => createAccount('coach', ct)} disabled={loading} style={{
-                      padding:'14px 20px', borderRadius:14, border:'1.5px solid #1e3a5f',
-                      background:'#0f172a', color:'#f8fafc', cursor:'pointer', textAlign:'left',
+                    <button key={ct} className="role-btn" aria-label={ct} aria-pressed={selectedCoachTypes.includes(ct)} onClick={() => setSelectedCoachTypes(types => types.includes(ct) ? types.filter(type => type !== ct) : [...types, ct])} disabled={loading} style={{
+                      padding:'14px 20px', borderRadius:14, border: selectedCoachTypes.includes(ct) ? '1.5px solid #3b82f6' : '1.5px solid #1e3a5f',
+                      background: selectedCoachTypes.includes(ct) ? '#1e3a5f' : '#0f172a', color:'#f8fafc', cursor:'pointer', textAlign:'left',
                       display:'flex', alignItems:'center', gap:14, transition:'all 0.2s',
                     }}>
                       <span style={{ fontSize:22 }}>📋</span>
@@ -249,6 +251,7 @@ export default function LoginPage() {
                     </button>
                   ))}
                 </div>
+                <button disabled={loading || selectedCoachTypes.length === 0} onClick={() => createAccount('coach', selectedCoachTypes)} style={{ ...btnPrimary, marginTop: 16, opacity: selectedCoachTypes.length === 0 ? .5 : 1 }}>선택 완료 · 가입하기</button>
                 <button onClick={() => { setStep('role'); setPendingRole(null); }} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
               </div>
             )}

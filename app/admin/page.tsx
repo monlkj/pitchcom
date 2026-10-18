@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 
 interface Member {
@@ -10,6 +11,7 @@ interface Member {
   email: string;
   role: string;
   coachType?: string;
+  coachTypes?: string[];
   teamCode: string;
   joinApproved?: boolean;
   joinRequestId?: string;
@@ -21,6 +23,7 @@ interface JoinRequest {
   userName: string;
   userRole: string;
   coachType?: string;
+  coachTypes?: string[];
   teamCode: string;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
@@ -38,6 +41,10 @@ export default function AdminPage() {
   const [teamCode, setTeamCode] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
+  const [editingCoach, setEditingCoach] = useState('');
+  const [coachSelection, setCoachSelection] = useState<string[]>([]);
+  const [coachSaving, setCoachSaving] = useState(false);
+  const [coachError, setCoachError] = useState('');
   const [ready, setReady] = useState(false);
 
   const loadMembers = async (code: string) => {
@@ -102,6 +109,21 @@ export default function AdminPage() {
     setReady(true);
   }, [router]);
 
+  const saveCoachTypes = async () => {
+    if (coachSaving || coachSelection.length === 0) return;
+    setCoachSaving(true); setCoachError('');
+    try {
+      const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
+      const target = users.find(u => u.id === editingCoach && u.role === 'coach' && u.teamCode === teamCode);
+      if (!target || !users.some(u => u.id === myId && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('member changed');
+      const updated = users.map(u => u.id === editingCoach ? { ...u, coachTypes: coachSelection, coachType: coachSelection.join(' · ') } : u);
+      await syncWrite('__global__', 'users', updated, true);
+      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+      setEditingCoach(''); await loadMembers(teamCode);
+    } catch { setCoachError('저장하지 못했습니다. 연결 상태와 팀원 정보를 확인하세요.'); }
+    finally { setCoachSaving(false); }
+  };
+
   const kickMember = (member: Member) => {
     if (member.id === myId) return;
     if (!confirm(`${member.name}님을 팀에서 내보낼까요?\n(계정은 유지되지만 팀 코드가 초기화돼요)`)) return;
@@ -143,13 +165,13 @@ export default function AdminPage() {
           <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f59e0b', fontWeight: 700 }}>⚡ 가입 요청 ({joinRequests.length})</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {joinRequests.map(req => (
-              <div key={req.id} style={{ padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1.5px solid #f59e0b33', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div key={req.id} style={{ padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1.5px solid #f59e0b33', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 12, background: '#f59e0b22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
                   {req.userRole === 'coach' ? '📋' : '⚾'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{req.userName}</div>
-                  <div style={{ fontSize: 12, color: '#f59e0b' }}>{req.userRole === 'coach' ? (req.coachType || '코치') : '선수'} · 가입 요청</div>
+                  <div style={{ fontSize: 12, color: '#f59e0b' }}>{req.userRole === 'coach' ? coachLabel(req) : '선수'} · 가입 요청</div>
                 </div>
                 <div style={{ display: 'flex', gap: 6 }}>
                   <button onClick={() => approveRequest(req)} style={{ padding: '7px 14px', borderRadius: 8, border: 'none', background: '#10b981', color: '#fff', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>수락</button>
@@ -202,7 +224,7 @@ export default function AdminPage() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {others.map(m => (
-              <div key={m.id} style={{ padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1px solid #334155', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div key={m.id} style={{ padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1px solid #334155', display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                 <div style={{ width: 38, height: 38, borderRadius: 12, background: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
                   {m.role === 'manager' ? '🧢' : m.role === 'coach' ? '📋' : '⚾'}
                 </div>
@@ -210,8 +232,9 @@ export default function AdminPage() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{m.name}</div>
                   <div style={{ fontSize: 12, color: '#64748b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#64748b', flexShrink: 0 }}>{m.role === 'coach' ? `📋 ${m.coachType || '코치'}` : (ROLE_LABEL[m.role] ?? m.role)}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                  {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
                   <button onClick={() => kickMember(m)} style={{
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #f59e0b33',
                     background: 'transparent', color: '#f59e0b', fontSize: 11, fontWeight: 700, cursor: 'pointer',
@@ -226,6 +249,17 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      {editingCoach && <section style={{ padding: 18, marginTop: 16, borderRadius: 14, background: '#1e293b', border: '1px solid #3b82f6' }}>
+        <h2 style={{ fontSize: 15, color: '#f8fafc', marginBottom: 12 }}>{members.find(m => m.id === editingCoach)?.name} · 코치 유형 변경</h2>
+        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 12 }}>기존 선택을 유지하며 여러 분야를 함께 선택할 수 있습니다.</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>{[...new Set([...COACH_TYPES, ...coachSelection])].map(type => <button key={type} disabled={coachSaving} aria-pressed={coachSelection.includes(type)} onClick={() => setCoachSelection(types => types.includes(type) ? types.filter(t => t !== type) : [...types, type])} style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid #3b82f6', background: coachSelection.includes(type) ? '#2563eb' : '#0f172a', color: '#f8fafc', cursor: 'pointer' }}>{type}</button>)}</div>
+        {coachError && <p role="alert" style={{ color: '#f87171', fontSize: 12, marginTop: 12 }}>{coachError}</p>}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button disabled={coachSaving || coachSelection.length === 0} onClick={saveCoachTypes} style={{ padding: '10px 18px', border: 0, borderRadius: 8, background: '#2563eb', color: '#fff' }}>{coachSaving ? '저장 중…' : '저장'}</button>
+          <button disabled={coachSaving} onClick={() => setEditingCoach('')} style={{ padding: '10px 18px', border: '1px solid #475569', borderRadius: 8, background: 'transparent', color: '#cbd5e1' }}>취소</button>
+        </div>
+      </section>}
 
       <div style={{ marginTop: 32, padding: '14px 18px', borderRadius: 14, background: '#1e293b', border: '1px solid #334155' }}>
         <p style={{ margin: '0 0 6px', fontSize: 12, color: '#64748b', fontWeight: 700 }}>팀 초대 방법</p>

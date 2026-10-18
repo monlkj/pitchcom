@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
+import { coachLabel } from '../lib/coachTypes';
 import { migrateTeamCache } from '../lib/teamStorage';
 
 const MENUS = [
@@ -61,7 +62,7 @@ export default function Home() {
     setPendingCount(0);
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
-    setCoachType(session.coachType ?? '');
+    setCoachType(coachLabel(session));
     setTeamCode(session.teamCode ?? '');
     setJoinApproved(session.joinApproved ?? null);
     setReady(true);
@@ -121,7 +122,7 @@ export default function Home() {
       const updated = users.filter(u => u.id !== session.id).concat(next);
       if (!isManager) {
         const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
-        const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
+        const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, coachTypes: session.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
         await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
       }
       await syncWrite('__global__', 'users', updated, true);
