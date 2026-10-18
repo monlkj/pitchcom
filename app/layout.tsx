@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
+import TeamAccess from "./components/TeamAccess";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -20,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="ko" className={geistSans.variable}>
       <body style={{ margin: 0, fontFamily: "var(--font-geist-sans), sans-serif", backgroundColor: "#0f172a", color: "#f8fafc" }}>
-        {children}
+        <TeamAccess>{children}</TeamAccess>
       </body>
     </html>
   );

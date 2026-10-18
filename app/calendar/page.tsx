@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -42,18 +44,18 @@ export default function CalendarPage() {
     setRole(s.role ?? '');
     setMyId(s.id ?? '');
     setTeamCode(s.teamCode ?? '');
-    const cached = JSON.parse(localStorage.getItem('pitchcom-calendar') || '[]');
+    const cached = JSON.parse(teamStorage.getItem('pitchcom-calendar') || '[]');
     setEvents(cached);
     if (s.teamCode) {
       syncRead(s.teamCode, 'calendar').then(d => {
-        if (Array.isArray(d)) { setEvents(d); localStorage.setItem('pitchcom-calendar', JSON.stringify(d)); }
+        if (Array.isArray(d)) { setEvents(d); teamStorage.setItem('pitchcom-calendar', JSON.stringify(d)); }
       });
     }
   }, [router]);
 
   const save = async (next: CalEvent[]) => {
     setEvents(next);
-    localStorage.setItem('pitchcom-calendar', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-calendar', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'calendar', next);
   };
 

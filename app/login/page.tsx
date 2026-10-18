@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
+import { migrateTeamCache } from '../../lib/teamStorage';
 
 const GLOBAL = '__global__';
 
@@ -27,6 +28,8 @@ interface LocalUser {
   coachType?: string;
   teamCode: string;
   joinApproved?: boolean;
+  joinRequestId?: string;
+  managedTeamCodes?: string[];
 }
 
 const COACH_TYPES = ['수석코치', '타격코치', '투수코치', '주루코치', '배터리코치', '수비코치'];
@@ -38,7 +41,8 @@ function saveUsers(users: LocalUser[]) {
   localStorage.setItem('pitchcom-users', JSON.stringify(users));
 }
 function setSession(user: LocalUser) {
-  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved }));
+  migrateTeamCache();
+  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes }));
 }
 
 const ROLES = [
@@ -65,20 +69,11 @@ export default function LoginPage() {
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true);
     const users = getUsers();
-    let userByEmail: LocalUser | undefined = users.find(u => u.email === email);
-    if (!userByEmail) {
-      // 로컬에 없으면 Supabase에서 조회
-      const cloudUsers = await getUsersFromCloud();
-      if (cloudUsers.length > 0) {
-        // 클라우드 유저를 로컬에 병합 저장
-        const merged = [...users];
-        for (const cu of cloudUsers) {
-          if (!merged.find(u => u.email === cu.email)) merged.push(cu);
-        }
-        saveUsers(merged);
-        userByEmail = cloudUsers.find(u => u.email === email);
-      }
-    }
+    const cloudUsers = await getUsersFromCloud();
+    const merged = [...cloudUsers];
+    for (const user of users) if (!merged.some(u => u.id === user.id)) merged.push(user);
+    saveUsers(merged);
+    const userByEmail = merged.find(u => u.email === email);
     if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
     if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
     setSession(userByEmail);

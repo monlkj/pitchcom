@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -47,7 +49,7 @@ export default function SignalPage() {
     setTeamCode(code);
 
     // localStorage 캐시 우선 표시
-    const local = localStorage.getItem('pitchcom-pitchers-v2');
+    const local = teamStorage.getItem('pitchcom-pitchers-v2');
     if (local) {
       const data = JSON.parse(local) as Pitcher[];
       setPitchers(data);
@@ -62,7 +64,7 @@ export default function SignalPage() {
         if (remote && Array.isArray(remote) && remote.length > 0) {
           setPitchers(remote);
           setSelectedId(remote[0].id);
-          localStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(remote));
+          teamStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(remote));
         }
       });
     }
@@ -70,7 +72,7 @@ export default function SignalPage() {
 
   const save = (next: Pitcher[]) => {
     setPitchers(next);
-    localStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-pitchers-v2', JSON.stringify(next));
     if (teamCode) syncWrite(teamCode, 'pitchers', next);
   };
 
@@ -135,11 +137,11 @@ export default function SignalPage() {
   };
 
   const recordResult = (result: 'strike' | 'ball' | 'foul') => {
-    const raw = localStorage.getItem('pitchcom-stats');
+    const raw = teamStorage.getItem('pitchcom-stats');
     const stats = raw ? JSON.parse(raw) : [];
     const pitcher = pitchers.find(p => p.id === selectedId);
     stats.push({ pitch: pendingPitch, pitcher: pitcher?.name ?? '', result, date: new Date().toISOString().slice(0, 10), time: Date.now() });
-    localStorage.setItem('pitchcom-stats', JSON.stringify(stats));
+    teamStorage.setItem('pitchcom-stats', JSON.stringify(stats));
     syncWrite(teamCode, 'pitch-stats', stats);
     setLastPitch(pendingPitch);
     setPendingPitch('');

@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -88,14 +90,14 @@ export default function TeamPage() {
     setTeamCode(code);
 
     // localStorage 캐시 우선 표시
-    const t = JSON.parse(localStorage.getItem('pitchcom-teams') || '[]') as Team[];
+    const t = JSON.parse(teamStorage.getItem('pitchcom-teams') || '[]') as Team[];
     setTeams(t);
     if (t.length > 0) setSelectedTeam(t[0].id);
-    setAllBat(JSON.parse(localStorage.getItem('pitchcom-bat-stats') || '{}'));
-    setAllPit(JSON.parse(localStorage.getItem('pitchcom-pit-stats') || '{}'));
-    setLineups(JSON.parse(localStorage.getItem('pitchcom-lineups') || '{}'));
-    setLineupPositions(JSON.parse(localStorage.getItem('pitchcom-lineup-positions') || '{}'));
-    setRotations(JSON.parse(localStorage.getItem('pitchcom-rotations') || '{}'));
+    setAllBat(JSON.parse(teamStorage.getItem('pitchcom-bat-stats') || '{}'));
+    setAllPit(JSON.parse(teamStorage.getItem('pitchcom-pit-stats') || '{}'));
+    setLineups(JSON.parse(teamStorage.getItem('pitchcom-lineups') || '{}'));
+    setLineupPositions(JSON.parse(teamStorage.getItem('pitchcom-lineup-positions') || '{}'));
+    setRotations(JSON.parse(teamStorage.getItem('pitchcom-rotations') || '{}'));
 
     // Supabase에서 최신 팀 데이터 동기화
     if (code) {
@@ -110,22 +112,22 @@ export default function TeamPage() {
         setSyncing(false);
         if (rTeams && Array.isArray(rTeams) && rTeams.length > 0) {
           setTeams(rTeams); setSelectedTeam(rTeams[0].id);
-          localStorage.setItem('pitchcom-teams', JSON.stringify(rTeams));
+          teamStorage.setItem('pitchcom-teams', JSON.stringify(rTeams));
         }
-        if (rBat) { setAllBat(rBat); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(rBat)); }
-        if (rPit) { setAllPit(rPit); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(rPit)); }
-        if (rLineups) { setLineups(rLineups); localStorage.setItem('pitchcom-lineups', JSON.stringify(rLineups)); }
-        if (rRotations) { setRotations(rRotations); localStorage.setItem('pitchcom-rotations', JSON.stringify(rRotations)); }
+        if (rBat) { setAllBat(rBat); teamStorage.setItem('pitchcom-bat-stats', JSON.stringify(rBat)); }
+        if (rPit) { setAllPit(rPit); teamStorage.setItem('pitchcom-pit-stats', JSON.stringify(rPit)); }
+        if (rLineups) { setLineups(rLineups); teamStorage.setItem('pitchcom-lineups', JSON.stringify(rLineups)); }
+        if (rRotations) { setRotations(rRotations); teamStorage.setItem('pitchcom-rotations', JSON.stringify(rRotations)); }
         syncRead(code, 'lineup-positions').then(rPos => {
-          if (rPos) { setLineupPositions(rPos); localStorage.setItem('pitchcom-lineup-positions', JSON.stringify(rPos)); }
+          if (rPos) { setLineupPositions(rPos); teamStorage.setItem('pitchcom-lineup-positions', JSON.stringify(rPos)); }
         });
       });
     }
   }, [router]);
 
-  const saveTeams = (next: Team[]) => { setTeams(next); localStorage.setItem('pitchcom-teams', JSON.stringify(next)); syncWrite(teamCode, 'teams', next); };
-  const saveBat = (next: AllBat) => { setAllBat(next); localStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); syncWrite(teamCode, 'bat-stats', next); };
-  const savePit = (next: AllPit) => { setAllPit(next); localStorage.setItem('pitchcom-pit-stats', JSON.stringify(next)); syncWrite(teamCode, 'pit-stats', next); };
+  const saveTeams = (next: Team[]) => { setTeams(next); teamStorage.setItem('pitchcom-teams', JSON.stringify(next)); syncWrite(teamCode, 'teams', next); };
+  const saveBat = (next: AllBat) => { setAllBat(next); teamStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); syncWrite(teamCode, 'bat-stats', next); };
+  const savePit = (next: AllPit) => { setAllPit(next); teamStorage.setItem('pitchcom-pit-stats', JSON.stringify(next)); syncWrite(teamCode, 'pit-stats', next); };
 
   const addTeam = () => {
     const name = newTeamName.trim(); if (!name) return;
@@ -518,11 +520,11 @@ export default function TeamPage() {
         const positions: string[] = lineupPositions[selectedTeam] ?? Array(9).fill('');
         const saveLineup = (next: string[]) => {
           const n = { ...lineups, [selectedTeam]: next };
-          setLineups(n); localStorage.setItem('pitchcom-lineups', JSON.stringify(n)); syncWrite(teamCode, 'lineups', n);
+          setLineups(n); teamStorage.setItem('pitchcom-lineups', JSON.stringify(n)); syncWrite(teamCode, 'lineups', n);
         };
         const saveLineupPos = (next: string[]) => {
           const n = { ...lineupPositions, [selectedTeam]: next };
-          setLineupPositions(n); localStorage.setItem('pitchcom-lineup-positions', JSON.stringify(n)); syncWrite(teamCode, 'lineup-positions', n);
+          setLineupPositions(n); teamStorage.setItem('pitchcom-lineup-positions', JSON.stringify(n)); syncWrite(teamCode, 'lineup-positions', n);
         };
         const assignPlayer = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'lineup') return;
@@ -675,7 +677,7 @@ export default function TeamPage() {
         const rotation: string[] = rotations[selectedTeam] ?? Array(12).fill('');
         const saveRotation = (next: string[]) => {
           const n = { ...rotations, [selectedTeam]: next };
-          setRotations(n); localStorage.setItem('pitchcom-rotations', JSON.stringify(n)); syncWrite(teamCode, 'rotations', n);
+          setRotations(n); teamStorage.setItem('pitchcom-rotations', JSON.stringify(n)); syncWrite(teamCode, 'rotations', n);
         };
         const assignPitcher = (pid: string) => {
           if (!pickingSlot || pickingSlot.type !== 'rotation') return;

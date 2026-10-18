@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -66,9 +68,9 @@ export default function MessagesPage() {
     setMyName(s.name ?? '');
     setTeamCode(s.teamCode ?? '');
 
-    setMessages(JSON.parse(localStorage.getItem('pitchcom-messages') || '[]'));
-    setNotices(JSON.parse(localStorage.getItem('pitchcom-notices') || '[]'));
-    setPolls(JSON.parse(localStorage.getItem('pitchcom-polls') || '[]'));
+    setMessages(JSON.parse(teamStorage.getItem('pitchcom-messages') || '[]'));
+    setNotices(JSON.parse(teamStorage.getItem('pitchcom-notices') || '[]'));
+    setPolls(JSON.parse(teamStorage.getItem('pitchcom-polls') || '[]'));
 
     if (s.teamCode) {
       setSyncing(true);
@@ -78,9 +80,9 @@ export default function MessagesPage() {
         syncRead(s.teamCode, 'polls'),
       ]).then(([rm, rn, rp]) => {
         setSyncing(false);
-        if (Array.isArray(rm)) { setMessages(rm); localStorage.setItem('pitchcom-messages', JSON.stringify(rm)); }
-        if (Array.isArray(rn)) { setNotices(rn); localStorage.setItem('pitchcom-notices', JSON.stringify(rn)); }
-        if (Array.isArray(rp)) { setPolls(rp); localStorage.setItem('pitchcom-polls', JSON.stringify(rp)); }
+        if (Array.isArray(rm)) { setMessages(rm); teamStorage.setItem('pitchcom-messages', JSON.stringify(rm)); }
+        if (Array.isArray(rn)) { setNotices(rn); teamStorage.setItem('pitchcom-notices', JSON.stringify(rn)); }
+        if (Array.isArray(rp)) { setPolls(rp); teamStorage.setItem('pitchcom-polls', JSON.stringify(rp)); }
       });
     }
   }, [router]);
@@ -91,19 +93,19 @@ export default function MessagesPage() {
 
   const saveMessages = async (next: ChatMsg[]) => {
     setMessages(next);
-    localStorage.setItem('pitchcom-messages', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-messages', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'messages', next);
   };
 
   const saveNotices = async (next: Notice[]) => {
     setNotices(next);
-    localStorage.setItem('pitchcom-notices', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-notices', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'notices', next);
   };
 
   const savePolls = async (next: Poll[]) => {
     setPolls(next);
-    localStorage.setItem('pitchcom-polls', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-polls', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'polls', next);
   };
 

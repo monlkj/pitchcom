@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -51,17 +53,17 @@ export default function FieldPage() {
     setRole(s.role ?? '');
     setTeamCode(s.teamCode ?? '');
 
-    const t = JSON.parse(localStorage.getItem('pitchcom-teams') || '[]') as Team[];
+    const t = JSON.parse(teamStorage.getItem('pitchcom-teams') || '[]') as Team[];
     setTeams(t);
-    const f = JSON.parse(localStorage.getItem('pitchcom-formations') || '[]') as Formation[];
+    const f = JSON.parse(teamStorage.getItem('pitchcom-formations') || '[]') as Formation[];
     setFormations(f);
     if (f.length > 0) { setActiveFormationId(f[0].id); setSlots(f[0].slots); }
 
     if (s.teamCode) {
       Promise.all([syncRead(s.teamCode, 'teams'), syncRead(s.teamCode, 'field-formations')]).then(([rt, rf]) => {
-        if (Array.isArray(rt)) { setTeams(rt); localStorage.setItem('pitchcom-teams', JSON.stringify(rt)); }
+        if (Array.isArray(rt)) { setTeams(rt); teamStorage.setItem('pitchcom-teams', JSON.stringify(rt)); }
         if (Array.isArray(rf)) {
-          setFormations(rf); localStorage.setItem('pitchcom-formations', JSON.stringify(rf));
+          setFormations(rf); teamStorage.setItem('pitchcom-formations', JSON.stringify(rf));
           if (rf.length > 0) { setActiveFormationId(rf[0].id); setSlots(rf[0].slots); }
         }
       });
@@ -70,7 +72,7 @@ export default function FieldPage() {
 
   const saveFormations = async (next: Formation[]) => {
     setFormations(next);
-    localStorage.setItem('pitchcom-formations', JSON.stringify(next));
+    teamStorage.setItem('pitchcom-formations', JSON.stringify(next));
     if (teamCode) await syncWrite(teamCode, 'field-formations', next);
   };
 

@@ -1,5 +1,7 @@
 'use client';
 
+import { teamStorage } from '../../lib/teamStorage';
+
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -60,7 +62,7 @@ export default function StatsPage() {
 
     // localStorage 캐시 우선 표시
     try {
-      const local = localStorage.getItem('pitchcom-stats');
+      const local = teamStorage.getItem('pitchcom-stats');
       if (local) setRecords(JSON.parse(local) as PitchRecord[]);
     } catch {}
 
@@ -71,7 +73,7 @@ export default function StatsPage() {
         setSyncing(false);
         if (remote && Array.isArray(remote) && remote.length > 0) {
           setRecords(remote);
-          localStorage.setItem('pitchcom-stats', JSON.stringify(remote));
+          teamStorage.setItem('pitchcom-stats', JSON.stringify(remote));
         }
       });
     }
@@ -79,7 +81,7 @@ export default function StatsPage() {
 
   const clearStats = () => {
     if (!confirm('통계를 모두 초기화할까요?')) return;
-    localStorage.removeItem('pitchcom-stats');
+    teamStorage.removeItem('pitchcom-stats');
     setRecords([]);
     syncWrite(teamCode, 'pitch-stats', []);
   };

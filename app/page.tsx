@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
+import { migrateTeamCache } from '../lib/teamStorage';
 
 const MENUS = [
   { href: '/speedgun', emoji: '⚾', label: '구속 측정', desc: '투구 영상으로 평균 구속 측정', color: '#22c55e' },
@@ -23,6 +24,7 @@ export default function Home() {
   const [editingCode, setEditingCode] = useState(false);
   const [newCode, setNewCode] = useState('');
   const [codeError, setCodeError] = useState('');
+  const [savingCode, setSavingCode] = useState(false);
   const [joinApproved, setJoinApproved] = useState<boolean | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
 
@@ -30,6 +32,8 @@ export default function Home() {
     const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
     const me = cloudUsers.find((u: any) => u.id === sessionId);
     if (!me) return;
+    const live = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+    if (live.id !== sessionId || live.teamCode !== code || (me.teamCode !== code && me.teamCode !== '') || me.joinRequestId !== live.joinRequestId) return;
     if (me.joinApproved === true) {
       const raw = localStorage.getItem('pitchcom-session')!;
       const session = JSON.parse(raw);
@@ -53,6 +57,8 @@ export default function Home() {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
+    migrateTeamCache();
+    setPendingCount(0);
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
     setCoachType(session.coachType ?? '');
@@ -66,7 +72,7 @@ export default function Home() {
       });
     }
     // 코치/선수가 대기 중이면 승인 여부 확인
-    if ((session.role === 'coach' || session.role === 'player') && session.teamCode && session.joinApproved === false) {
+    if ((session.role === 'coach' || session.role === 'player') && session.teamCode && session.joinApproved !== true) {
       checkApprovalStatus(session.id, session.teamCode);
     }
   }, [router]);
@@ -90,55 +96,40 @@ export default function Home() {
   const saveCode = async () => {
     const code = newCode.trim().toUpperCase();
     if (!code) { setCodeError('팀 코드를 입력해주세요'); return; }
-
-    // 항상 클라우드와 병합 (현재 유저가 로컬에 없을 수 있음)
-    let users: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
-    for (const cu of cloudUsers) {
-      if (!users.find((u: any) => u.email === cu.email)) users.push(cu);
-    }
-    localStorage.setItem('pitchcom-users', JSON.stringify(users));
-
-    if (userRole === 'coach' || userRole === 'player') {
-      const managerExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
-      if (!managerExists) { setCodeError('존재하지 않는 팀 코드예요'); return; }
-    }
-    if (userRole === 'manager' && !teamCode) {
-      const codeExists = users.find((u: any) => u.teamCode === code && u.role === 'manager');
-      if (codeExists) { setCodeError('이미 사용 중인 팀 코드예요'); return; }
-    }
-    const raw = localStorage.getItem('pitchcom-session');
-    if (!raw) return;
-    const session = JSON.parse(raw);
-    session.teamCode = code;
-    localStorage.setItem('pitchcom-session', JSON.stringify(session));
-    const updated = users.map((u: any) => u.id === session.id ? { ...u, teamCode: code } : u);
-    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
-    // 클라우드에도 반영
-    await syncWrite('__global__', 'users', updated);
-    // 코치/선수는 가입 요청 생성 후 대기
-    if (userRole === 'coach' || userRole === 'player') {
-      const raw2 = localStorage.getItem('pitchcom-session')!;
-      const session2 = JSON.parse(raw2);
-      const existingReqs: any[] = (await syncRead(code, 'join-requests')) ?? [];
-      const newReq = { id: Date.now().toString(), userId: session2.id, userName: session2.name, userRole: session2.role, coachType: session2.coachType, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
-      await syncWrite(code, 'join-requests', [...existingReqs.filter((r: any) => r.userId !== session2.id), newReq]);
-      updated.forEach((u: any) => { if (u.id === session2.id) { u.teamCode = code; u.joinApproved = false; } });
+    if (savingCode) return;
+    setSavingCode(true);
+    try {
+      const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+      if (!session.id) return;
+      if (session.teamCode === code) { setEditingCode(false); return; }
+      const localUsers: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+      const cloud = await syncRead('__global__', 'users', true);
+      const users: any[] = Array.isArray(cloud) ? [...cloud] : [...localUsers];
+      for (const user of localUsers) if (!users.some(u => u.id === user.id)) users.push(user);
+      const me = users.find(u => u.id === session.id) ?? session;
+      const isManager = session.role === 'manager';
+      const managed = Array.from(new Set([...(me.managedTeamCodes ?? []), ...(isManager && session.teamCode ? [session.teamCode] : [])]));
+      const owner = users.find(u => u.role === 'manager' && u.id !== session.id && (u.teamCode === code || u.managedTeamCodes?.includes(code)));
+      if (!isManager && !users.some(u => u.role === 'manager' && (u.teamCode === code || u.managedTeamCodes?.includes(code)))) {
+        setCodeError('존재하지 않는 팀 코드예요'); return;
+      }
+      if (isManager && owner) { setCodeError('다른 감독이 사용 중인 팀 코드예요'); return; }
+      migrateTeamCache();
+      const requestId = isManager ? undefined : crypto.randomUUID();
+      const next = { ...me, ...session, teamCode: code, joinApproved: isManager, joinRequestId: requestId,
+        ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, code])) } : {}) };
+      const updated = users.filter(u => u.id !== session.id).concat(next);
+      if (!isManager) {
+        const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
+        const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
+        await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
+      }
+      await syncWrite('__global__', 'users', updated, true);
       localStorage.setItem('pitchcom-users', JSON.stringify(updated));
-      await syncWrite('__global__', 'users', updated);
-      session.teamCode = code; session.joinApproved = false;
-      localStorage.setItem('pitchcom-session', JSON.stringify(session));
-      setTeamCode(code); setJoinApproved(false); setEditingCode(false); setNewCode(''); setCodeError('');
-      return;
-    }
-    // 세션에서 이름/역할 명시적 갱신 (이전 상태 잔류 방지)
-    setUserName(session.name ?? '');
-    setUserRole(session.role ?? '');
-    setTeamCode(code);
-    setJoinApproved(true);
-    setEditingCode(false);
-    setNewCode('');
-    setCodeError('');
+      localStorage.setItem('pitchcom-session', JSON.stringify(next));
+      // Remount pages so old team state and pending async callbacks cannot be reused.
+      window.location.assign('/');
+    } catch { setCodeError('팀 변경을 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.'); } finally { setSavingCode(false); }
   };
 
   if (!ready) return null;
@@ -147,7 +138,7 @@ export default function Home() {
   // 코치/선수이고 팀코드 없으면 팀코드 입력만 표시
   const needTeamCode = !teamCode && (userRole === 'coach' || userRole === 'player');
   // 대기 중 화면
-  const isPending = (userRole === 'coach' || userRole === 'player') && teamCode && joinApproved === false;
+  const isPending = (userRole === 'coach' || userRole === 'player') && teamCode && joinApproved !== true;
 
   return (
     <>
@@ -229,7 +220,7 @@ export default function Home() {
                 }}
               />
               {codeError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
-              <button onClick={saveCode} style={{
+              <button disabled={savingCode} onClick={saveCode} style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                 color: '#fff', fontSize: 16, fontWeight: 900, cursor: 'pointer',
@@ -262,7 +253,7 @@ export default function Home() {
                       transition: 'border-color 0.2s',
                     }}
                   />
-                  <button onClick={saveCode} style={{
+                  <button disabled={savingCode} onClick={saveCode} style={{
                     padding: '12px 20px', borderRadius: 12, border: 'none',
                     background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                     color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
@@ -287,7 +278,7 @@ export default function Home() {
                         autoFocus
                         style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #3b82f6', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 800, letterSpacing: 1, outline: 'none' }}
                       />
-                      <button onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                      <button disabled={savingCode} onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
                       <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
                     </div>
                     {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}

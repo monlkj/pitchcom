@@ -12,6 +12,7 @@ interface Member {
   coachType?: string;
   teamCode: string;
   joinApproved?: boolean;
+  joinRequestId?: string;
 }
 
 interface JoinRequest {
@@ -42,14 +43,14 @@ export default function AdminPage() {
   const loadMembers = async (code: string) => {
     const local: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const cloud: Member[] = (await syncRead('__global__', 'users')) ?? [];
-    const merged: Member[] = [...local];
-    for (const cu of cloud) {
-      if (!merged.find(u => u.email === cu.email)) merged.push(cu);
+    const merged: Member[] = [...cloud];
+    for (const user of local) {
+      if (!merged.find(u => u.id === user.id)) merged.push(user);
     }
     localStorage.setItem('pitchcom-users', JSON.stringify(merged));
     setMembers(merged.filter(u => u.teamCode === code && u.joinApproved !== false));
     const reqs: JoinRequest[] = (await syncRead(code, 'join-requests')) ?? [];
-    setJoinRequests(reqs.filter(r => r.status === 'pending'));
+    setJoinRequests(reqs.filter(r => r.status === 'pending' && merged.some(u => u.id === r.userId && u.teamCode === code && u.joinApproved === false && u.joinRequestId === r.id)));
   };
 
   const approveRequest = async (req: JoinRequest) => {
@@ -57,6 +58,11 @@ export default function AdminPage() {
     const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const allUsers = [...cloudUsers];
     for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const requester = allUsers.find(u => u.id === req.userId);
+    const freshRequests: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
+    if (!requester || requester.teamCode !== teamCode || requester.joinRequestId !== req.id || !freshRequests.some(r => r.id === req.id && r.status === 'pending')) {
+      await loadMembers(teamCode); return;
+    }
     const updated = allUsers.map(u => u.id === req.userId ? { ...u, joinApproved: true } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     await syncWrite('__global__', 'users', updated);
@@ -71,6 +77,11 @@ export default function AdminPage() {
     const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const allUsers = [...cloudUsers];
     for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const requester = allUsers.find(u => u.id === req.userId);
+    const freshRequests: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
+    if (!requester || requester.teamCode !== teamCode || requester.joinRequestId !== req.id || !freshRequests.some(r => r.id === req.id && r.status === 'pending')) {
+      await loadMembers(teamCode); return;
+    }
     const updated = allUsers.map(u => u.id === req.userId ? { ...u, teamCode: '', joinApproved: undefined } : u);
     localStorage.setItem('pitchcom-users', JSON.stringify(updated));
     await syncWrite('__global__', 'users', updated);
