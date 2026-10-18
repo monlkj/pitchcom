@@ -209,6 +209,21 @@ export default function TeamPage() {
         ))}
       </div>
 
+      <button onClick={() => router.push('/field')} style={{
+        width: '100%', padding: '16px 18px', marginBottom: 20,
+        borderRadius: 14, border: '1px solid #06b6d444',
+        background: '#06b6d411', color: '#f8fafc',
+        display: 'flex', alignItems: 'center', gap: 12,
+        textAlign: 'left', cursor: 'pointer',
+      }}>
+        <span style={{ fontSize: 24 }} aria-hidden="true">🗺️</span>
+        <span style={{ flex: 1 }}>
+          <strong style={{ display: 'block', fontSize: 15 }}>수비 포지션</strong>
+          <span style={{ display: 'block', marginTop: 4, fontSize: 12, color: '#94a3b8' }}>야구장에서 선수별 수비 배치 편집</span>
+        </span>
+        <span aria-hidden="true" style={{ color: '#64748b', fontSize: 20 }}>›</span>
+      </button>
+
       {/* ─── 선수 관리 ─── */}
       {tab === '선수 관리' && (
         <>

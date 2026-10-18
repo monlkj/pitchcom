@@ -129,7 +129,7 @@ export default function FieldPage() {
       {/* 헤더 */}
       <div style={{ padding: '20px 16px 12px', background: 'linear-gradient(180deg, #0f172a 0%, #0b1120 100%)', borderBottom: '1px solid #1e293b' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
-          <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+          <button onClick={() => router.push('/team')} aria-label="팀/선수 관리로 돌아가기" style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
           <div style={{ flex: 1 }}>
             <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>수비 포지션</h1>
             <div style={{ fontSize: 12, color: '#475569', marginTop: 2 }}>
