@@ -184,9 +184,12 @@ export default function TeamPage() {
     const t = teams.find(t => t.players.some(pl => pl.id === p.id));
     return t?.id === statsTeam;
   });
-  // 한 타석도 없는 선수 / 등판 없는 선수는 기록 탭에서 제외
+  // 타자 기록은 타석 기준, 투수 기록은 투수 포지션 또는 기존 기록 기준으로 표시
   const filteredStatsBatters = filteredStatsPlayers.filter(p => (allBat[p.id]?.pa ?? 0) > 0);
-  const filteredStatsPitchers = filteredStatsPlayers.filter(p => (allPit[p.id]?.ip ?? 0) > 0);
+  const filteredStatsPitchers = filteredStatsPlayers.filter(p => {
+    const positions = Array.isArray(p.position) ? p.position : [p.position];
+    return positions.includes('투수') || allPit[p.id] !== undefined;
+  });
 
   const bf = (k: keyof BatStats, v: string) => setBatForm(f => ({ ...f, [k]: Math.max(0, parseInt(v) || 0) }));
   const pf = (k: keyof PitStats, v: string) => setPitForm(f => ({ ...f, [k]: k === 'ip' ? Math.max(0, parseFloat(v) || 0) : Math.max(0, parseInt(v) || 0) }));
@@ -447,7 +450,7 @@ export default function TeamPage() {
           {filteredStatsPitchers.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
               <div style={{ fontSize: 40, marginBottom: 10 }}>⚾</div>
-              <p style={{ margin: 0 }}>아직 등판 기록이 있는 선수가 없어요</p>
+              <p style={{ margin: 0 }}>투수로 등록된 선수나 기존 투구 기록이 없어요</p>
             </div>
           ) : filteredStatsPitchers.map(p => {
             const s = allPit[p.id] ?? EMPTY_PIT;
