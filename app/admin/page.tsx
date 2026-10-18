@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
 import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 
@@ -38,6 +39,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function AdminPage() {
   const router = useRouter();
   const [myId, setMyId] = useState('');
+  const [myEmail, setMyEmail] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [members, setMembers] = useState<Member[]>([]);
   const [joinRequests, setJoinRequests] = useState<JoinRequest[]>([]);
@@ -52,10 +54,11 @@ export default function AdminPage() {
     const cloud: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const merged: Member[] = [...cloud];
     for (const user of local) {
-      if (!merged.find(u => u.id === user.id)) merged.push(user);
+      if (!merged.find(u => u.id === user.id || (normalizedEmail(user.email) && normalizedEmail(u.email) === normalizedEmail(user.email)))) merged.push(user);
     }
     localStorage.setItem('pitchcom-users', JSON.stringify(merged));
-    setMembers(merged.filter(u => u.teamCode === code && u.joinApproved !== false));
+    const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+    setMembers(uniqueMembers(merged.filter(u => u.teamCode === code && u.joinApproved !== false), session.id));
     const reqs: JoinRequest[] = (await syncRead(code, 'join-requests')) ?? [];
     setJoinRequests(reqs.filter(r => r.status === 'pending' && merged.some(u => u.id === r.userId && u.teamCode === code && u.joinApproved === false && u.joinRequestId === r.id)));
   };
@@ -104,6 +107,7 @@ export default function AdminPage() {
     const session = JSON.parse(raw);
     if (session.role !== 'manager') { router.push('/'); return; }
     setMyId(session.id);
+    setMyEmail(normalizedEmail(session.email));
     setTeamCode(session.teamCode ?? '');
     loadMembers(session.teamCode ?? '');
     setReady(true);
@@ -125,7 +129,7 @@ export default function AdminPage() {
   };
 
   const kickMember = (member: Member) => {
-    if (member.id === myId) return;
+    if (member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
     if (!confirm(`${member.name}님을 팀에서 내보낼까요?\n(계정은 유지되지만 팀 코드가 초기화돼요)`)) return;
     const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const updated = users.map(u => u.id === member.id ? { ...u, teamCode: '' } : u);
@@ -135,7 +139,7 @@ export default function AdminPage() {
   };
 
   const deleteAccount = (member: Member) => {
-    if (member.id === myId) return;
+    if (member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
     if (!confirm(`${member.name}님의 계정을 삭제할까요?\n이 작업은 되돌릴 수 없어요.`)) return;
     const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
     const updated = users.filter(u => u.id !== member.id);
@@ -146,8 +150,9 @@ export default function AdminPage() {
 
   if (!ready) return null;
 
-  const me = members.find(m => m.id === myId);
-  const others = members.filter(m => m.id !== myId);
+  const isMe = (member: Member) => member.id === myId || Boolean(myEmail && normalizedEmail(member.email) === myEmail);
+  const me = members.find(m => m.id === myId) ?? members.find(isMe);
+  const others = members.filter(m => !isMe(m));
 
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
