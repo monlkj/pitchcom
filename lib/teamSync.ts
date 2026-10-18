@@ -1,10 +1,11 @@
 import { supabase } from './supabase';
+import { isDeletedAccount, refreshDeletedAccounts } from './accountDeletion';
 
 function canUseTeam(teamCode: string) {
   if (teamCode === '__global__') return true;
   if (typeof window === 'undefined') return false;
   const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
-  return session.teamCode === teamCode && (session.role === 'manager' || session.joinApproved === true);
+  return !isDeletedAccount(session.id) && session.teamCode === teamCode && (session.role === 'manager' || session.joinApproved === true);
 }
 
 export async function syncRead(teamCode: string, key: string, strict = false): Promise<any | null> {
@@ -19,6 +20,10 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
       .single();
     if (error) { if (strict) throw error; return null; }
     if (!data || (key !== 'join-requests' && !canUseTeam(teamCode))) return null;
+    if (teamCode === '__global__' && key === 'users') {
+      const deleted = await refreshDeletedAccounts();
+      return Array.isArray(data.data) ? data.data.filter((user: { id: string }) => !deleted.has(user.id)) : data.data;
+    }
     return (data as any).data;
   } catch (error) { if (strict) throw error; return null; }
 }
@@ -27,6 +32,10 @@ export async function syncWrite(teamCode: string, key: string, value: any, stric
   if (!supabase || !teamCode) { if (strict) throw new Error('팀 변경을 저장하려면 서버 연결이 필요합니다.'); return; }
   if (key !== 'join-requests' && !canUseTeam(teamCode)) return;
   try {
+    if (teamCode === '__global__' && key === 'users') {
+      const deleted = await refreshDeletedAccounts();
+      value = value.filter((user: { id: string }) => !deleted.has(user.id));
+    }
     const { error } = await supabase.from('team_shared_data').upsert({
       team_code: teamCode,
       data_key: key,

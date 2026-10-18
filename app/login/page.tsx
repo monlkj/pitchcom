@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { refreshDeletedAccounts, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 import { COACH_TYPES } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
@@ -36,7 +37,7 @@ interface LocalUser {
 
 
 function getUsers(): LocalUser[] {
-  try { return JSON.parse(localStorage.getItem('pitchcom-users') || '[]'); } catch { return []; }
+  try { return withoutDeletedAccounts(JSON.parse(localStorage.getItem('pitchcom-users') || '[]')); } catch { return []; }
 }
 function saveUsers(users: LocalUser[]) {
   localStorage.setItem('pitchcom-users', JSON.stringify(users));
@@ -70,10 +71,11 @@ export default function LoginPage() {
     setError('');
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true);
+    try { await refreshDeletedAccounts(); } catch { setError('서버에서 계정 상태를 확인할 수 없습니다. 연결 후 다시 시도하세요.'); setLoading(false); return; }
     const users = getUsers();
     const cloudUsers = await getUsersFromCloud();
     const merged = [...cloudUsers];
-    for (const user of users) if (!merged.some(u => u.id === user.id)) merged.push(user);
+    for (const user of withoutDeletedAccounts(users)) if (!merged.some(u => u.id === user.id)) merged.push(user);
     saveUsers(merged);
     const userByEmail = merged.find(u => u.email === email);
     if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
@@ -88,6 +90,7 @@ export default function LoginPage() {
     if (!email.trim()) { setError('이메일을 입력해주세요'); return; }
     if (password.length < 4) { setError('비밀번호는 4자 이상이에요'); return; }
     setLoading(true);
+    try { await refreshDeletedAccounts(); } catch { setError('서버에서 계정 상태를 확인할 수 없습니다. 연결 후 다시 시도하세요.'); setLoading(false); return; }
     const localUsers = getUsers();
     if (localUsers.find(u => u.email === email)) { setError('이미 사용 중인 이메일이에요'); setLoading(false); return; }
     // 클라우드에서도 중복 확인

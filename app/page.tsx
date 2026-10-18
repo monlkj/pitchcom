@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
+import { withoutDeletedAccounts } from '../lib/accountDeletion';
 import { coachLabel } from '../lib/coachTypes';
 import { migrateTeamCache } from '../lib/teamStorage';
 
@@ -106,7 +107,7 @@ export default function Home() {
       const localUsers: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
       const cloud = await syncRead('__global__', 'users', true);
       const users: any[] = Array.isArray(cloud) ? [...cloud] : [...localUsers];
-      for (const user of localUsers) if (!users.some(u => u.id === user.id)) users.push(user);
+      for (const user of withoutDeletedAccounts(localUsers)) if (!users.some(u => u.id === user.id)) users.push(user);
       const me = users.find(u => u.id === session.id) ?? session;
       const isManager = session.role === 'manager';
       const managed = Array.from(new Set([...(me.managedTeamCodes ?? []), ...(isManager && session.teamCode ? [session.teamCode] : [])]));

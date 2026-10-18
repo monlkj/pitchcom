@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { markAccountsDeleted, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
 import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -38,6 +39,8 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [deletingId, setDeletingId] = useState('');
+  const [deleteError, setDeleteError] = useState('');
   const [myId, setMyId] = useState('');
   const [myEmail, setMyEmail] = useState('');
   const [teamCode, setTeamCode] = useState('');
@@ -58,7 +61,7 @@ export default function AdminPage() {
     }
     localStorage.setItem('pitchcom-users', JSON.stringify(merged));
     const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
-    setMembers(uniqueMembers(merged.filter(u => u.teamCode === code && u.joinApproved !== false), session.id));
+    setMembers(uniqueMembers(withoutDeletedAccounts(merged).filter(u => u.teamCode === code && u.joinApproved !== false), session.id));
     const reqs: JoinRequest[] = (await syncRead(code, 'join-requests')) ?? [];
     setJoinRequests(reqs.filter(r => r.status === 'pending' && merged.some(u => u.id === r.userId && u.teamCode === code && u.joinApproved === false && u.joinRequestId === r.id)));
   };
@@ -119,7 +122,7 @@ export default function AdminPage() {
     try {
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
       const target = users.find(u => u.id === editingCoach && u.role === 'coach' && u.teamCode === teamCode);
-      if (!target || !users.some(u => u.id === myId && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('member changed');
+      if (!target || !users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('member changed');
       const updated = users.map(u => u.id === editingCoach ? { ...u, coachTypes: coachSelection, coachType: coachSelection.join(' · ') } : u);
       await syncWrite('__global__', 'users', updated, true);
       localStorage.setItem('pitchcom-users', JSON.stringify(updated));
@@ -138,14 +141,26 @@ export default function AdminPage() {
     loadMembers(teamCode);
   };
 
-  const deleteAccount = (member: Member) => {
-    if (member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
-    if (!confirm(`${member.name}님의 계정을 삭제할까요?\n이 작업은 되돌릴 수 없어요.`)) return;
-    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const updated = users.filter(u => u.id !== member.id);
-    localStorage.setItem('pitchcom-users', JSON.stringify(updated));
-    syncWrite('__global__', 'users', updated);
-    loadMembers(teamCode);
+  const deleteAccount = async (member: Member) => {
+    if (deletingId || member.id === myId || (myEmail && normalizedEmail(member.email) === myEmail)) return;
+    if (!confirm(`${member.name}님의 계정을 삭제할까요?\n로그인할 수 없게 되며 기존 로그인도 해제됩니다. 되돌릴 수 없습니다.`)) return;
+    setDeletingId(member.id); setDeleteError('');
+    try {
+      const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
+      const actor = users.find(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode);
+      const target = users.find(u => u.id === member.id && u.teamCode === teamCode);
+      if (!actor || !target) throw new Error('계정 상태 변경');
+      const cached: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
+      const ids = [...new Set([...users, ...cached].filter(u => u.id === member.id || (normalizedEmail(member.email) && normalizedEmail(u.email) === normalizedEmail(member.email))).map(u => u.id))];
+      await markAccountsDeleted(ids);
+      const updated = users.filter(u => !ids.includes(u.id));
+      await syncWrite('__global__', 'users', updated, true);
+      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
+      const requests: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
+      await syncWrite(teamCode, 'join-requests', requests.filter(r => !ids.includes(r.userId)), true);
+      await loadMembers(teamCode);
+    } catch { setDeleteError('삭제 처리를 완료하지 못했습니다. 일부 처리되었을 수 있으니 새로고침 후 상태를 확인하세요.'); await loadMembers(teamCode); }
+    finally { setDeletingId(''); }
   };
 
   if (!ready) return null;
@@ -218,6 +233,7 @@ export default function AdminPage() {
         </div>
       )}
 
+      {deleteError && <p role="alert" style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{deleteError}</p>}
       {/* 팀원 목록 */}
       <div>
         <p style={{ margin: '0 0 8px', fontSize: 12, color: '#475569', fontWeight: 700 }}>팀원 ({others.length}명)</p>
@@ -244,7 +260,7 @@ export default function AdminPage() {
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #f59e0b33',
                     background: 'transparent', color: '#f59e0b', fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   }}>내보내기</button>
-                  <button onClick={() => deleteAccount(m)} style={{
+                  <button disabled={Boolean(deletingId)} onClick={() => deleteAccount(m)} style={{
                     padding: '6px 10px', borderRadius: 8, border: '1px solid #ef444433',
                     background: 'transparent', color: '#ef4444', fontSize: 11, fontWeight: 700, cursor: 'pointer',
                   }}>삭제</button>

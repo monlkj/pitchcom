@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { refreshDeletedAccounts } from '../../lib/accountDeletion';
 import { migrateTeamCache } from '../../lib/teamStorage';
 
 export default function TeamAccess({ children }: { children: React.ReactNode }) {
@@ -14,18 +15,39 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
     window.addEventListener('storage', refresh);
     return () => window.removeEventListener('storage', refresh);
   }, []);
+  const [connectionError, setConnectionError] = useState(false);
   useEffect(() => {
-    setAllowedPath('');
+    let active = true;
+    let checking = false;
+    setAllowedPath(''); setConnectionError(false);
     if (path === '/login') { setAllowedPath(path); return; }
-    try {
-      const session = JSON.parse(localStorage.getItem('pitchcom-session') || 'null');
-      if (!session) { router.replace('/login'); return; }
-      migrateTeamCache();
-      if (path !== '/' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
-        router.replace('/'); return;
-      }
-      setAllowedPath(path);
-    } catch { router.replace('/login'); }
+    const check = async () => {
+      if (checking) return;
+      checking = true;
+      try {
+        const session = JSON.parse(localStorage.getItem('pitchcom-session') || 'null');
+        if (!session) { if (active) router.replace('/login'); return; }
+        const deleted = await refreshDeletedAccounts();
+        if (!active) return;
+        if (deleted.has(session.id)) {
+          localStorage.removeItem('pitchcom-session');
+          setAllowedPath(''); router.replace('/login'); return;
+        }
+        migrateTeamCache();
+        if (path !== '/' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
+          router.replace('/'); return;
+        }
+        setConnectionError(false); setAllowedPath(path);
+      } catch { if (active) { setAllowedPath(''); setConnectionError(true); } }
+      finally { checking = false; }
+    };
+    void check();
+    const timer = window.setInterval(check, 15000);
+    window.addEventListener('focus', check);
+    window.addEventListener('online', check);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', check); window.removeEventListener('online', check); };
   }, [path, router]);
+  if (connectionError) return <p role="alert" style={{ padding: 24, color: '#cbd5e1' }}>계정 상태를 확인할 수 없습니다. 인터넷 연결을 확인해 주세요. 연결되면 다시 확인합니다.</p>;
+
   return allowedPath === path ? children : null;
 }
