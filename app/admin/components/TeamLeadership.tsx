@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { normalizedEmail } from '../../../lib/memberIdentity';
 import { syncRead, syncWrite } from '../../../lib/teamSync';
-import { EMPTY_LEADERSHIP, resolveLeadership, type Leadership, type LeaderMember } from '../../../lib/teamLeadership';
+import { EMPTY_LEADERSHIP, isEligibleLeader, resolveLeadership, type Leadership, type LeaderMember } from '../../../lib/teamLeadership';
 
 type Member = LeaderMember & { name: string; email: string };
 export default function TeamLeadership({ teamCode, members, onChange }: { teamCode: string; members: Member[]; onChange: (value: Leadership) => void }) {
@@ -12,7 +12,7 @@ export default function TeamLeadership({ teamCode, members, onChange }: { teamCo
   const [busy, setBusy] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [message, setMessage] = useState('');
-  const eligible = members.filter(m => m.role === 'player' && m.teamCode === teamCode && m.joinApproved === true);
+  const eligible = members.filter(m => isEligibleLeader(m, teamCode));
   useEffect(() => {
     let active = true;
     setLoaded(false);
@@ -30,7 +30,7 @@ export default function TeamLeadership({ teamCode, members, onChange }: { teamCo
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
       if (session.teamCode !== teamCode || session.role !== 'manager' || !users.some(u => (u.id === session.id || (normalizedEmail(session.email) && normalizedEmail(u.email) === normalizedEmail(session.email))) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('권한 변경');
-      const target = id ? users.find(u => u.id === id && u.role === 'player' && u.teamCode === teamCode && u.joinApproved === true) : null;
+      const target = id ? users.find(u => u.id === id && isEligibleLeader(u, teamCode)) : null;
       if (id && !target) throw new Error('선수 상태 변경');
       const saved = await syncRead(teamCode, 'leadership', true);
       const next = resolveLeadership(saved, users, teamCode);
@@ -59,7 +59,7 @@ export default function TeamLeadership({ teamCode, members, onChange }: { teamCo
         <button disabled={busy || !loaded} onClick={() => appoint(item.key, item.selected)} style={{ padding: '10px 14px', borderRadius: 9, border: 0, color: '#fff', background: '#2563eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>{item.label} {item.selected ? '임명' : '해제'}</button>
       </div>
     </div>)}
-    {!eligible.length && <p style={{ marginTop: 12, color: '#94a3b8', fontSize: 12 }}>임명할 수 있는 승인된 선수가 없습니다.</p>}
+    {!eligible.length && <p style={{ marginTop: 12, color: '#94a3b8', fontSize: 12 }}>가입한 선수 계정이 없습니다. 선수 관리에만 등록한 명단은 이 목록과 별개입니다.</p>}
     {message && <p role="status" style={{ marginTop: 12, color: '#93c5fd', fontSize: 12 }}>{message}</p>}
   </section>;
 }
