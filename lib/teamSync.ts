@@ -12,12 +12,8 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
   if (!supabase || !teamCode) { if (strict) throw new Error('서버 연결 필요'); return null; }
   if (key !== 'join-requests' && !canUseTeam(teamCode)) return null;
   try {
-    const { data, error } = await supabase
-      .from('team_shared_data')
-      .select('data')
-      .eq('team_code', teamCode)
-      .eq('data_key', key)
-      .single();
+    const query = supabase.from('team_shared_data').select('data').eq('team_code', teamCode).eq('data_key', key);
+    const { data, error } = key === 'leadership' ? await query.maybeSingle() : await query.single();
     if (error) { if (strict) throw error; return null; }
     if (!data || (key !== 'join-requests' && !canUseTeam(teamCode))) return null;
     if (teamCode === '__global__' && key === 'users') {

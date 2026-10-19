@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import TeamLeadership from './components/TeamLeadership';
+import { EMPTY_LEADERSHIP, type Leadership } from '../../lib/teamLeadership';
 import AccountDeletionForm from './components/AccountDeletionForm';
 import { markAccountsDeleted, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
@@ -40,6 +42,7 @@ const ROLE_LABEL: Record<string, string> = {
 
 export default function AdminPage() {
   const router = useRouter();
+  const [leadership, setLeadership] = useState<Leadership>(EMPTY_LEADERSHIP);
   const [kickingId, setKickingId] = useState('');
   const [deletingId, setDeletingId] = useState('');
   const [deleteError, setDeleteError] = useState('');
@@ -244,6 +247,8 @@ export default function AdminPage() {
       )}
 
       {deleteError && <p role="alert" style={{ color: '#f87171', fontSize: 13, marginBottom: 12 }}>{deleteError}</p>}
+      <TeamLeadership teamCode={teamCode} members={members} onChange={setLeadership} />
+
       {/* 팀원 목록 */}
       <div>
         <p style={{ margin: '0 0 8px', fontSize: 12, color: '#475569', fontWeight: 700 }}>팀원 ({others.length}명)</p>
@@ -263,7 +268,7 @@ export default function AdminPage() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{m.name}</div>
                   <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (m.role === 'player' && leadership.captainId === m.id ? '⭐ 주장' : m.role === 'player' && leadership.viceCaptainId === m.id ? '🌟 부주장' : ROLE_LABEL[m.role] ?? m.role)}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
                   <button disabled={Boolean(kickingId || deletingId)} onClick={() => kickMember(m)} style={{

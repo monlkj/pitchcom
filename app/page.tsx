@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
 import { withoutDeletedAccounts } from '../lib/accountDeletion';
+import { resolveLeadership } from '../lib/teamLeadership';
 import { coachLabel } from '../lib/coachTypes';
 import { migrateTeamCache } from '../lib/teamStorage';
 
@@ -21,6 +22,7 @@ export default function Home() {
   const [removalNotice, setRemovalNotice] = useState<{ id: string; teamCode: string } | null>(null);
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
+  const [playerTitle, setPlayerTitle] = useState('선수');
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [coachType, setCoachType] = useState('');
@@ -81,6 +83,23 @@ export default function Home() {
     }
   }, [router]);
 
+  useEffect(() => {
+    let active = true;
+    setPlayerTitle('선수');
+    if (userRole !== 'player' || !teamCode || joinApproved !== true) return;
+    const refresh = async () => {
+      const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+      const saved = await syncRead(teamCode, 'leadership');
+      if (!active || session.teamCode !== teamCode) return;
+      const leaders = resolveLeadership(saved, [session], teamCode);
+      setPlayerTitle(leaders.captainId === session.id ? '주장' : leaders.viceCaptainId === session.id ? '부주장' : '선수');
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [userRole, teamCode, joinApproved]);
+
   const logout = () => {
     localStorage.removeItem('pitchcom-session');
     router.push('/login');
@@ -138,7 +157,7 @@ export default function Home() {
 
   if (!ready) return null;
 
-  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? `📋 ${coachType || '코치'}` : '⚾ 선수';
+  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? `📋 ${coachType || '코치'}` : `⚾ ${playerTitle}`;
   // 코치/선수이고 팀코드 없으면 팀코드 입력만 표시
   const needTeamCode = !teamCode && (userRole === 'coach' || userRole === 'player');
   // 대기 중 화면

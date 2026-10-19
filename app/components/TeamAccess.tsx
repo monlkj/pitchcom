@@ -38,7 +38,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
         const users = await syncRead('__global__', 'users', true);
         if (!active || localStorage.getItem('pitchcom-session') !== rawSession) return;
         const remote = Array.isArray(users) ? users.find((user: { id: string }) => user.id === session.id) : null;
-        if (remote && (session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.removalNotice?.id !== remote.removalNotice?.id)) {
+        if (remote && (session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.joinRequestId !== remote.joinRequestId || session.removalNotice?.id !== remote.removalNotice?.id)) {
           migrateTeamCache();
           localStorage.setItem('pitchcom-session', JSON.stringify({ ...session, teamCode: remote.teamCode, joinApproved: remote.joinApproved, joinRequestId: remote.joinRequestId, removalNotice: remote.removalNotice }));
           window.location.assign('/'); return;
