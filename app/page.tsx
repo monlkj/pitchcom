@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../lib/teamSync';
 import { withoutDeletedAccounts } from '../lib/accountDeletion';
+import { managedTeams, sameAccount } from '../lib/managerTeams';
 import { resolveLeadership } from '../lib/teamLeadership';
 import { coachLabel } from '../lib/coachTypes';
 import { migrateTeamCache } from '../lib/teamStorage';
@@ -22,6 +23,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
   const [playerTitle, setPlayerTitle] = useState('선수');
+  const [managedCodes, setManagedCodes] = useState<string[]>([]);
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [coachType, setCoachType] = useState('');
@@ -70,6 +72,13 @@ export default function Home() {
     setTeamCode(session.teamCode ?? '');
     setJoinApproved(session.joinApproved ?? null);
     setReady(true);
+    if (session.role === 'manager') {
+      setManagedCodes(managedTeams([], session));
+      syncRead('__global__', 'users').then(users => {
+        const current = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+        if (current.id === session.id) setManagedCodes(managedTeams(Array.isArray(users) ? users : [], session));
+      });
+    }
     // 감독: 가입 요청 수 확인
     if (session.role === 'manager' && session.teamCode) {
       syncRead(session.teamCode, 'join-requests').then((reqs: any) => {
@@ -115,9 +124,9 @@ export default function Home() {
     router.push('/login');
   };
 
-  const saveCode = async () => {
-    const code = newCode.trim().toUpperCase();
-    if (!code) { setCodeError('팀 코드를 입력해주세요'); return; }
+  const saveCode = async (targetCode?: string, leave = false) => {
+    const code = (typeof targetCode === 'string' ? targetCode : newCode).trim().toUpperCase();
+    if (!code && !leave) { setCodeError('팀 코드를 입력해주세요'); return; }
     if (savingCode) return;
     setSavingCode(true);
     try {
@@ -128,19 +137,21 @@ export default function Home() {
       const cloud = await syncRead('__global__', 'users', true);
       const users: any[] = Array.isArray(cloud) ? [...cloud] : [...localUsers];
       for (const user of withoutDeletedAccounts(localUsers)) if (!users.some(u => u.id === user.id)) users.push(user);
-      const me = users.find(u => u.id === session.id) ?? session;
+      const me = users.find(u => u.id === session.id) ?? users.find(u => sameAccount(u, session)) ?? session;
       const isManager = session.role === 'manager';
-      const managed = Array.from(new Set([...(me.managedTeamCodes ?? []), ...(isManager && session.teamCode ? [session.teamCode] : [])]));
-      const owner = users.find(u => u.role === 'manager' && u.id !== session.id && (u.teamCode === code || u.managedTeamCodes?.includes(code)));
-      if (!isManager && !users.some(u => u.role === 'manager' && (u.teamCode === code || u.managedTeamCodes?.includes(code)))) {
+      if (leave && !isManager) throw new Error('감독만 팀을 전환할 수 있습니다.');
+      const managed = managedTeams(users, session);
+      const owner = users.find(u => u.role === 'manager' && !sameAccount(u, session) && managedTeams([], u).includes(code));
+      if (!isManager && !users.some(u => u.role === 'manager' && managedTeams([], u).includes(code))) {
         setCodeError('존재하지 않는 팀 코드예요'); return;
       }
-      if (isManager && owner) { setCodeError('다른 감독이 사용 중인 팀 코드예요'); return; }
+      if (isManager && code && owner) { setCodeError('다른 감독이 사용 중인 팀 코드예요'); return; }
       migrateTeamCache();
       const requestId = isManager ? undefined : crypto.randomUUID();
       const next = { ...me, ...session, teamCode: code, joinApproved: isManager, joinRequestId: requestId,
-        ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, code])) } : {}) };
-      const updated = users.filter(u => u.id !== session.id).concat(next);
+        ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, ...(code ? [code] : [])])) } : {}) };
+      const updated = users.filter(u => u.id !== session.id).map(u => isManager && u.role === 'manager' && sameAccount(u, session)
+        ? { ...u, teamCode: code, joinApproved: true, managedTeamCodes: next.managedTeamCodes } : u).concat(next);
       if (!isManager) {
         const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
         const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, coachTypes: session.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
@@ -248,7 +259,7 @@ export default function Home() {
                 }}
               />
               {codeError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
-              <button disabled={savingCode} onClick={saveCode} style={{
+              <button disabled={savingCode} onClick={() => saveCode()} style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                 color: '#fff', fontSize: 16, fontWeight: 900, cursor: 'pointer',
@@ -281,7 +292,7 @@ export default function Home() {
                       transition: 'border-color 0.2s',
                     }}
                   />
-                  <button disabled={savingCode} onClick={saveCode} style={{
+                  <button disabled={savingCode} onClick={() => saveCode()} style={{
                     padding: '12px 20px', borderRadius: 12, border: 'none',
                     background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                     color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
@@ -306,7 +317,7 @@ export default function Home() {
                         autoFocus
                         style={{ flex: 1, padding: '10px 14px', borderRadius: 10, border: '1.5px solid #3b82f6', background: '#0f172a', color: '#f8fafc', fontSize: 15, fontWeight: 800, letterSpacing: 1, outline: 'none' }}
                       />
-                      <button disabled={savingCode} onClick={saveCode} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
+                      <button disabled={savingCode} onClick={() => saveCode()} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
                       <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
                     </div>
                     {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
@@ -324,6 +335,16 @@ export default function Home() {
                 )}
               </div>
             )}
+
+            {userRole === 'manager' && <section style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155' }}>
+              <h2 style={{ margin: '0 0 10px', fontSize: 14, color: '#f8fafc' }}>내 팀</h2>
+              <p style={{ margin: '0 0 12px', color: '#94a3b8', fontSize: 12, lineHeight: 1.7 }}>새 팀으로 이동하거나 나가도 기존 팀은 유지됩니다. 아래 팀을 누르면 승인 없이 다시 들어갑니다.</p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {managedCodes.map(code => <button key={code} aria-label={`${code}팀으로 이동`} disabled={savingCode || teamCode === code} onClick={() => saveCode(code)} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #3b82f655', background: teamCode === code ? '#1d4ed8' : '#0f172a', color: '#f8fafc', cursor: 'pointer' }}>{code}{teamCode === code ? ' · 접속 중' : ''}</button>)}
+              </div>
+              {teamCode && <button disabled={savingCode} onClick={() => saveCode('', true)} style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}>팀에서 나가기</button>}
+              {!editingCode && codeError && <p role="alert" style={{ marginTop: 10, color: '#f87171', fontSize: 12 }}>{codeError}</p>}
+            </section>}
 
             {/* 메뉴 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
