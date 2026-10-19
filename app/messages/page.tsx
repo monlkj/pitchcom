@@ -1,5 +1,6 @@
 'use client';
 
+import TeamCalendar from '../calendar/TeamCalendar';
 import { teamStorage } from '../../lib/teamStorage';
 
 import { useState, useEffect, useRef } from 'react';
@@ -40,7 +41,7 @@ interface Poll {
 
 export default function MessagesPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<'chat' | 'notice' | 'poll'>('chat');
+  const [tab, setTab] = useState<'chat' | 'notice' | 'poll' | 'calendar'>('chat');
   const [role, setRole] = useState('');
   const [myId, setMyId] = useState('');
   const [myName, setMyName] = useState('');
@@ -60,6 +61,8 @@ export default function MessagesPage() {
   const canEdit = role === 'manager' || role === 'coach';
 
   useEffect(() => {
+    const initialTab = window.location.hash.slice(1);
+    if (['chat', 'notice', 'poll', 'calendar'].includes(initialTab)) setTab(initialTab as 'chat' | 'notice' | 'poll' | 'calendar');
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const s = JSON.parse(raw);
@@ -193,6 +196,7 @@ export default function MessagesPage() {
     { key: 'chat', label: '💬 채팅' },
     { key: 'notice', label: '📢 공지' },
     { key: 'poll', label: '🗳️ 투표' },
+    { key: 'calendar', label: '📅 팀 달력' },
   ] as const;
 
   return (
@@ -208,15 +212,17 @@ export default function MessagesPage() {
         {/* 탭 */}
         <div style={{ display: 'flex', background: '#1e293b', borderRadius: 12, padding: 4, gap: 3, marginBottom: 0 }}>
           {TABS.map(t => (
-            <button key={t.key} onClick={() => setTab(t.key)} style={{
+            <button key={t.key} aria-pressed={tab === t.key} onClick={() => { setTab(t.key); window.history.replaceState(null, '', `#${t.key}`); }} style={{
               flex: 1, padding: '9px 4px', borderRadius: 9, border: 'none',
-              background: tab === t.key ? (t.key === 'chat' ? '#3b82f6' : t.key === 'notice' ? '#f59e0b' : '#8b5cf6') : 'transparent',
+              background: tab === t.key ? (t.key === 'chat' ? '#3b82f6' : t.key === 'notice' ? '#f59e0b' : t.key === 'calendar' ? '#10b981' : '#8b5cf6') : 'transparent',
               color: tab === t.key ? '#fff' : '#64748b',
               fontSize: 12, fontWeight: 700, cursor: 'pointer',
             }}>{t.label}</button>
           ))}
         </div>
       </div>
+
+      {tab === 'calendar' && <section aria-label="팀 달력" style={{ padding: '0 16px' }}><TeamCalendar embedded /></section>}
 
       {/* ── 채팅 ── */}
       {tab === 'chat' && (

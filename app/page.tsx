@@ -9,12 +9,11 @@ import { coachLabel } from '../lib/coachTypes';
 import { migrateTeamCache } from '../lib/teamStorage';
 
 const MENUS = [
-  { href: '/speedgun', emoji: '⚾', label: '구속 측정', desc: '투구 영상으로 평균 구속 측정', color: '#22c55e' },
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
-  { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록·기록 관리', color: '#f59e0b' },
   { href: '/stats', emoji: '📊', label: '투구 통계', desc: '타자·투수 기록 조회 및 분석', color: '#ef4444' },
-  { href: '/calendar', emoji: '📅', label: '팀 달력', desc: '경기·훈련 일정 및 참석 관리', color: '#10b981' },
-  { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '채팅·공지·투표', color: '#8b5cf6' },
+  { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록·기록 관리', color: '#f59e0b' },
+  { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '채팅·공지·투표·팀 달력', color: '#8b5cf6' },
+  { href: '/speedgun', emoji: '⚾', label: '구속 측정', desc: '투구 영상으로 평균 구속 측정', color: '#22c55e' },
 ];
 
 export default function Home() {
