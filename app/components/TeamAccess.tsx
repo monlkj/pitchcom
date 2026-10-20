@@ -27,8 +27,15 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
       checking = true;
       try {
         const rawSession = localStorage.getItem('pitchcom-session');
-        const session = JSON.parse(rawSession || 'null');
-        if (!session) { if (active) router.replace('/login'); return; }
+        let session;
+        try { session = JSON.parse(rawSession || 'null'); } catch { session = null; }
+        if (!session || typeof session.id !== 'string' || !session.id.trim() || !['manager', 'coach', 'player'].includes(session.role)) {
+          if (active) {
+            localStorage.removeItem('pitchcom-session');
+            setAllowedPath(''); router.replace('/login');
+          }
+          return;
+        }
         const deleted = await refreshDeletedAccounts();
         if (!active) return;
         if (deleted.has(session.id)) {
