@@ -100,7 +100,7 @@ function PitcherContent() {
             ⚾ 입장하기
           </button>
         </div>
-        <a href="/" style={{ color: '#475569', fontSize: 13, textDecoration: 'none' }}>← 홈으로</a>
+        <a href="/home" style={{ color: '#475569', fontSize: 13, textDecoration: 'none' }}>← 홈으로</a>
       </div>
     );
   }
@@ -108,7 +108,7 @@ function PitcherContent() {
   return (
     <div style={{ minHeight: '100vh', padding: '24px 16px', maxWidth: 480, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <a href="/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: 22 }}>←</a>
+        <a href="/home" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: 22 }}>←</a>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 900 }}>⚾ {myName} 투수</h1>
           <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>방 코드: {room}</p>

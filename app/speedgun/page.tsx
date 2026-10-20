@@ -35,7 +35,7 @@ export default function SpeedgunPage() {
     <main style={{ minHeight: '100dvh', paddingTop: 64, background: '#0f172a' }}>
       <header style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 10, background: '#0f172a' }}>
         <div style={{ maxWidth: 480, margin: '0 auto', padding: '12px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <Link href="/" aria-label="홈으로 돌아가기" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 40, color: '#64748b', fontSize: 22 }}>←</Link>
+          <Link href="/home" aria-label="홈으로 돌아가기" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 32, height: 40, color: '#64748b', fontSize: 22 }}>←</Link>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>⚾ 구속 측정</h1>
         </div>
       </header>

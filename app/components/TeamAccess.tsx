@@ -21,6 +21,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
     let active = true;
     let checking = false;
     setAllowedPath(''); setConnectionError(false);
+    if (path === '/') { router.replace('/login'); return; }
     if (path === '/login') { setAllowedPath(path); return; }
     const check = async () => {
       if (checking) return;
@@ -48,11 +49,11 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
         if (remote && (session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.joinRequestId !== remote.joinRequestId || session.removalNotice?.id !== remote.removalNotice?.id)) {
           migrateTeamCache();
           localStorage.setItem('pitchcom-session', JSON.stringify({ ...session, teamCode: remote.teamCode, joinApproved: remote.joinApproved, joinRequestId: remote.joinRequestId, removalNotice: remote.removalNotice }));
-          window.location.assign('/'); return;
+          window.location.assign('/home'); return;
         }
         migrateTeamCache();
-        if (path !== '/' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
-          router.replace('/'); return;
+        if (path !== '/home' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
+          router.replace('/home'); return;
         }
         setConnectionError(false); setAllowedPath(path);
       } catch { if (active) { setAllowedPath(''); setConnectionError(true); } }

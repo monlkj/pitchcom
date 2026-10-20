@@ -113,7 +113,7 @@ export default function AdminPage() {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
-    if (session.role !== 'manager') { router.push('/'); return; }
+    if (session.role !== 'manager') { router.push('/home'); return; }
     setMyId(session.id);
     setMyEmail(normalizedEmail(session.email));
     setTeamCode(session.teamCode ?? '');
@@ -185,7 +185,7 @@ export default function AdminPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+        <button onClick={() => router.push('/home')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <div>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>🛡️ 감독 관리</h1>
           <p style={{ margin: '2px 0 0', fontSize: 12, color: '#475569' }}>팀 코드: {teamCode}</p>

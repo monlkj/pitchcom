@@ -3,6 +3,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 export default function TeamCodePage() {
   const router = useRouter();
-  useEffect(() => { router.replace('/'); }, [router]);
+  useEffect(() => { router.replace('/home'); }, [router]);
   return null;
 }

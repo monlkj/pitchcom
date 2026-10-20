@@ -82,7 +82,7 @@ function CatcherContent() {
 
       {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <a href="/" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: 22 }}>←</a>
+        <a href="/home" style={{ color: '#94a3b8', textDecoration: 'none', fontSize: 22 }}>←</a>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900 }}>🦺 포수 패널</h1>
         <span style={{ marginLeft: 'auto', fontSize: 12, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 10 }}>
           {room}

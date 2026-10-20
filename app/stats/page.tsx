@@ -93,7 +93,7 @@ export default function StatsPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 480, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+        <button onClick={() => router.push('/home')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>📊 투구 통계</h1>
         {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
         {isManager && records.length > 0 && (

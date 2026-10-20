@@ -82,7 +82,7 @@ export default function LoginPage() {
     if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
     if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
     setSession(userByEmail);
-    router.push('/');
+    router.push('/home');
   };
 
   const handleSignupInfo = async () => {
@@ -138,7 +138,7 @@ export default function LoginPage() {
     await saveUsersToCloud(merged);
     const saved = localStorage.getItem('pitchcom-session');
     if (saved) {
-      router.push('/');
+      router.push('/home');
     } else {
       setError('저장 오류가 발생했어요. 다시 시도해주세요.');
       setLoading(false);

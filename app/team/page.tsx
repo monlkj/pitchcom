@@ -197,7 +197,7 @@ export default function TeamPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0f172a', padding: '20px 16px', maxWidth: 560, margin: '0 auto' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-        <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+        <button onClick={() => router.push('/home')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>👥 팀/선수 관리</h1>
         {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
         {!isManager && !isCoach && !syncing && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#475569', background: '#1e293b', padding: '4px 10px', borderRadius: 20 }}>읽기 전용</span>}

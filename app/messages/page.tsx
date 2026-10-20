@@ -204,7 +204,7 @@ export default function MessagesPage() {
       {/* 헤더 */}
       <div style={{ padding: '20px 16px 0', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-          <button onClick={() => router.push('/')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
+          <button onClick={() => router.push('/home')} style={{ background: 'none', border: 'none', color: '#64748b', fontSize: 22, cursor: 'pointer', padding: 0 }}>←</button>
           <h1 style={{ margin: 0, fontSize: 20, fontWeight: 900, color: '#f8fafc' }}>💬 팀 메시지</h1>
           {syncing && <span style={{ fontSize: 11, color: '#3b82f6' }}>동기화 중...</span>}
         </div>
