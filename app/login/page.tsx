@@ -1,6 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import type { User } from '@supabase/supabase-js';
+import { supabase } from '../../lib/supabase';
+import { normalizedEmail } from '../../lib/memberIdentity';
 import { useRouter } from 'next/navigation';
 import { refreshDeletedAccounts, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { syncRead, syncWrite } from '../../lib/teamSync';
@@ -25,7 +28,8 @@ interface LocalUser {
   id: string;
   name: string;
   email: string;
-  password: string;
+  password?: string;
+  authUserId?: string;
   role: Role;
   coachType?: string;
   coachTypes?: string[];
@@ -43,9 +47,9 @@ function getUsers(): LocalUser[] {
 function saveUsers(users: LocalUser[]) {
   localStorage.setItem('pitchcom-users', JSON.stringify(users));
 }
-function setSession(user: LocalUser) {
+function setSession(user: LocalUser, authUserId?: string) {
   migrateTeamCache();
-  localStorage.setItem('pitchcom-session', JSON.stringify({ id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
+  localStorage.setItem('pitchcom-session', JSON.stringify({ authUserId, id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
 }
 
 const ROLES = [
@@ -66,9 +70,85 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+  const [linkNeeded, setLinkNeeded] = useState(false);
+  const oauthStarted = useRef(false);
+
+  // Only resume after an explicit OAuth redirect, never on an ordinary login visit.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('oauth') !== 'google' || oauthStarted.current) return;
+    oauthStarted.current = true;
+    setLoading(true);
+    void (async () => {
+      try {
+        if (!supabase) throw new Error('서버 연결 설정을 확인해 주세요.');
+        const { data, error: authError } = await supabase.auth.getUser();
+        window.history.replaceState(null, '', '/login');
+        if (authError || !data.user?.email || !data.user.identities?.some((identity: { provider: string }) => identity.provider === 'google')) {
+          throw new Error('구글 로그인을 완료하지 못했습니다. 다시 시도해 주세요.');
+        }
+        const user = data.user as User;
+        await refreshDeletedAccounts();
+        const users = await syncRead(GLOBAL, 'users', true);
+        if (!Array.isArray(users)) throw new Error('기존 계정 정보를 확인할 수 없습니다.');
+        const matches = (users as LocalUser[]).filter(u => normalizedEmail(u.email) === normalizedEmail(user.email));
+        if (matches.length > 1) throw new Error('같은 이메일의 기존 계정이 여러 개입니다. 계정 정리 후 연결해 주세요.');
+        const existing = matches[0];
+        if (existing?.authUserId && existing.authUserId !== user.id) throw new Error('이미 다른 구글 계정에 연결되어 있습니다.');
+        if (existing?.authUserId === user.id) {
+          setSession(existing, user.id);
+          router.replace('/home');
+          return;
+        }
+        localStorage.removeItem('pitchcom-session');
+        setGoogleUser(user); setEmail(user.email!); setPassword('');
+        if (existing) { setLinkNeeded(true); setTab('login'); }
+        else { setName(user.user_metadata.full_name || user.user_metadata.name || ''); setTab('signup'); setStep('info'); }
+      } catch (failure) {
+        window.history.replaceState(null, '', '/login');
+        setError(failure instanceof Error ? failure.message : '구글 로그인 연결에 실패했습니다. 다시 시도해 주세요.');
+      } finally { setLoading(false); }
+    })();
+  }, [router]);
+
+  const startGoogle = async () => {
+    setError(''); setLoading(true);
+    try {
+      if (!supabase) throw new Error('서버 연결 설정을 확인해 주세요.');
+      localStorage.removeItem('pitchcom-session');
+      const { error: authError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/login?oauth=google`, queryParams: { prompt: 'select_account' } },
+      });
+      if (authError) throw new Error('구글 로그인을 시작하지 못했습니다. 잠시 후 다시 시도해 주세요.');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '구글 로그인 연결 실패'); setLoading(false); }
+  };
+
+  const linkGoogle = async () => {
+    setError(''); setLoading(true);
+    try {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (authError || !googleUser || data.user?.id !== googleUser.id) throw new Error('구글 로그인을 다시 진행해 주세요.');
+      const users: LocalUser[] = await syncRead(GLOBAL, 'users', true);
+      const matches = users.filter(u => normalizedEmail(u.email) === normalizedEmail(data.user.email));
+      if (matches.length !== 1) throw new Error('기존 계정 정보를 확인할 수 없습니다.');
+      const existing = matches[0];
+      if (existing.authUserId && existing.authUserId !== googleUser.id) throw new Error('이미 다른 구글 계정에 연결되어 있습니다.');
+      if (!existing.password || existing.password !== password) throw new Error('기존 PitchCom 비밀번호가 맞지 않습니다.');
+      const { password: _legacyPassword, ...profile } = existing;
+      const linked = { ...profile, authUserId: googleUser.id };
+      const updated = users.map(u => u.id === existing.id ? linked : u);
+      await syncWrite(GLOBAL, 'users', updated, true);
+      saveUsers(updated);
+      setPassword(''); setSession(linked, googleUser.id); router.replace('/home');
+    } catch (failure) { setPassword(''); setError(failure instanceof Error ? failure.message : '계정 연결 실패'); }
+    finally { setLoading(false); }
+  };
+
   const resetSignup = () => { setStep('info'); setError(''); setPendingRole(null); };
 
   const handleLogin = async () => {
+    if (linkNeeded) { await linkGoogle(); return; }
     setError('');
     if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
     setLoading(true);
@@ -80,6 +160,7 @@ export default function LoginPage() {
     saveUsers(merged);
     const userByEmail = merged.find(u => u.email === email);
     if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
+    if (userByEmail.authUserId) { setError('구글로 로그인해 주세요.'); setLoading(false); return; }
     if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
     setSession(userByEmail);
     router.push('/home');
@@ -89,6 +170,7 @@ export default function LoginPage() {
     setError('');
     if (!name.trim()) { setError('이름을 입력해주세요'); return; }
     if (!email.trim()) { setError('이메일을 입력해주세요'); return; }
+    if (googleUser) { setStep('role'); return; }
     if (password.length < 4) { setError('비밀번호는 4자 이상이에요'); return; }
     setLoading(true);
     try { await refreshDeletedAccounts(); } catch { setError('서버에서 계정 상태를 확인할 수 없습니다. 연결 후 다시 시도하세요.'); setLoading(false); return; }
@@ -113,6 +195,7 @@ export default function LoginPage() {
   };
 
   const createAccount = async (r: Role, coachTypes: string[] = []) => {
+    if (googleUser) { await createGoogleAccount(r, coachTypes); return; }
     setLoading(true);
     const users = getUsers();
     const newUser: LocalUser = {
@@ -143,6 +226,22 @@ export default function LoginPage() {
       setError('저장 오류가 발생했어요. 다시 시도해주세요.');
       setLoading(false);
     }
+  };
+
+  const createGoogleAccount = async (r: Role, coachTypes: string[]) => {
+    setLoading(true); setError('');
+    try {
+      const { data, error: authError } = await supabase.auth.getUser();
+      if (authError || data.user?.id !== googleUser?.id || !data.user?.email) throw new Error('구글 로그인을 다시 진행해 주세요.');
+      const users: LocalUser[] = await syncRead(GLOBAL, 'users', true);
+      if (users.some(u => normalizedEmail(u.email) === normalizedEmail(data.user.email))) throw new Error('기존 계정이 있습니다. 구글 로그인을 다시 눌러 연결해 주세요.');
+      const user: LocalUser = { id: data.user.id, authUserId: data.user.id, name: name.trim(), email: data.user.email,
+        role: r, teamCode: '', joinApproved: r === 'manager' ? true : undefined,
+        ...(r === 'coach' ? { coachTypes, coachType: coachTypes.join(' · ') } : {}) };
+      await syncWrite(GLOBAL, 'users', [...users, user], true);
+      setSession(user, data.user.id); router.replace('/home');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '가입 정보를 저장하지 못했습니다.'); }
+    finally { setLoading(false); }
   };
 
   const inputStyle: React.CSSProperties = {
@@ -181,7 +280,7 @@ export default function LoginPage() {
 
           <div style={{ background:'rgba(30,41,59,0.85)', backdropFilter:'blur(20px)', borderRadius:24, border:'1px solid rgba(255,255,255,0.07)', padding:'28px 24px', boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
 
-            {(tab === 'login' || step === 'info') && (
+            {!googleUser && (tab === 'login' || step === 'info') && (
               <div style={{ display:'flex', background:'#0f172a', borderRadius:12, padding:4, marginBottom:22 }}>
                 {(['login','signup'] as const).map(t => (
                   <button key={t} onClick={() => { setTab(t); resetSignup(); setError(''); }} style={{
@@ -195,13 +294,17 @@ export default function LoginPage() {
               </div>
             )}
 
+            {!googleUser && <button onClick={startGoogle} disabled={loading} style={{ ...btnPrimary, background: '#fff', color: '#1e293b', marginBottom: 18 }}>Google로 로그인</button>}
+            {googleUser && <p style={{ color: '#93c5fd', fontSize: 14 }}>{linkNeeded ? '기존 팀과 기록을 연결하려면 PitchCom 비밀번호를 한 번 입력해 주세요.' : '구글 인증 완료! 이름과 역할을 선택해 주세요.'}</p>}
+            {googleUser && tab === 'signup' && step !== 'info' && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
+            {googleUser && <button disabled={loading} onClick={async () => { await supabase.auth.signOut({ scope: 'local' }); window.location.assign('/login'); }} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', marginBottom: 12 }}>다른 계정으로 로그인</button>}
             {/* 로그인 */}
             {tab === 'login' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
+                <input type="email" readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} placeholder="비밀번호" style={inputStyle} />
                 {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
-                <button onClick={handleLogin} disabled={loading} style={btnPrimary}>{loading ? '로그인 중...' : '로그인 →'}</button>
+                <button onClick={handleLogin} disabled={loading} style={btnPrimary}>{loading ? '로그인 중...' : linkNeeded ? '기존 계정 연결하기' : '로그인 →'}</button>
               </div>
             )}
 
@@ -209,10 +312,10 @@ export default function LoginPage() {
             {tab === 'signup' && step === 'info' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={inputStyle} autoFocus />
-                <input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
-                <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSignupInfo()} placeholder="비밀번호 (4자 이상)" style={inputStyle} />
+                <input type="email" readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
+                {!googleUser && <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSignupInfo()} placeholder="비밀번호 (4자 이상)" style={inputStyle} />}
                 {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
-                <button onClick={handleSignupInfo} style={btnPrimary}>다음 →</button>
+                <button onClick={handleSignupInfo} disabled={loading} style={btnPrimary}>다음 →</button>
               </div>
             )}
 

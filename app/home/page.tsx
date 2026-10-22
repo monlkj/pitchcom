@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 import { withoutDeletedAccounts } from '../../lib/accountDeletion';
@@ -108,8 +109,9 @@ export default function Home() {
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
   }, [userRole, teamCode, joinApproved]);
 
-  const logout = () => {
+  const logout = async () => {
     localStorage.removeItem('pitchcom-session');
+    if (supabase) await supabase.auth.signOut({ scope: 'local' });
     router.push('/login');
   };
 
