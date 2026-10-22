@@ -1,6 +1,6 @@
 # Google login
 
-This adds Google OAuth through Supabase Auth alongside the existing temporary-account login. It is not a complete authorization or email/password Auth migration.
+This adds Google OAuth through Supabase Auth alongside a separate temporary-account login below the Google button. New self-registration uses Google; existing legacy accounts still sign in through the temporary/legacy login panel. It is not a complete authorization or email/password Auth migration.
 
 ## Provider setup
 
@@ -24,3 +24,13 @@ The existing shared JSON users table, its anonymous-access policies, and the tem
 ## Verification
 
 Run `npx tsc --noEmit`. Browser checks should use a local mock Supabase service and fake identities only: OAuth redirect construction, cancellation/error, first-time profile creation, legacy-password linking, original ID/team preservation, no password saved for Google profiles, subsequent login, invalid Auth session rejection and logout. Real provider consent and the configured production deployment require a user-operated test with a Google test account; local mocks cannot prove Google project settings are correct.
+
+## Director-issued temporary accounts
+
+In Director Management, a director with a current team can issue player or coach accounts. Names and roles are selected before issuance, with multiple coach specialties supported. IDs and passwords are cryptographically generated. Because issuance is the director's explicit approval, the new profile joins that team as approved. Moving to another team still follows the existing approval process. New temporary accounts cannot be issued with the director role.
+
+Only the issuing screen displays the generated password; it is not retrievable after closing it. New temporary credentials use a random salt and PBKDF2-SHA256 (210,000 iterations), never a plaintext password field. The Google secret is unrelated and never used for temporary credentials. Legacy accounts remain compatible, including their existing plaintext storage limitations. There is no automatic expiry or password recovery for the newly issued accounts in this change. As with the rest of the legacy application, server-enforced membership/RLS migration remains outstanding; password hashing does not complete it.
+
+Temporary login fetches the authoritative cloud account list and deletion status and fails closed on network errors. It does not authenticate from stale local account cache. Issuance rechecks the current director and team, verifies Google Auth when the director is linked, and reports success only after the cloud write succeeds.
+
+Credential regression tests (Node 24): `node --experimental-strip-types tests/temporaryAccounts.test.mjs`. The three cases cover valid/invalid passwords, independent salts and malformed credentials. Local browser tests also exercised issuance failure, player/coach creation, temporary login and the Google PKCE regression flow using fake accounts only.

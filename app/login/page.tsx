@@ -3,24 +3,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
+import { verifyTemporaryPassword, type TemporaryCredential } from '../../lib/temporaryAccounts';
 import { normalizedEmail } from '../../lib/memberIdentity';
 import { useRouter } from 'next/navigation';
-import { refreshDeletedAccounts, withoutDeletedAccounts } from '../../lib/accountDeletion';
+import { refreshDeletedAccounts } from '../../lib/accountDeletion';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 import { COACH_TYPES } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
 
 const GLOBAL = '__global__';
-
-async function getUsersFromCloud(): Promise<LocalUser[]> {
-  try {
-    const data = await syncRead(GLOBAL, 'users');
-    return Array.isArray(data) ? data : [];
-  } catch { return []; }
-}
-async function saveUsersToCloud(users: LocalUser[]): Promise<void> {
-  await syncWrite(GLOBAL, 'users', users);
-}
 
 type Role = 'manager' | 'coach' | 'player';
 
@@ -30,6 +21,7 @@ interface LocalUser {
   email: string;
   password?: string;
   authUserId?: string;
+  temporaryCredential?: TemporaryCredential;
   role: Role;
   coachType?: string;
   coachTypes?: string[];
@@ -41,9 +33,6 @@ interface LocalUser {
 }
 
 
-function getUsers(): LocalUser[] {
-  try { return withoutDeletedAccounts(JSON.parse(localStorage.getItem('pitchcom-users') || '[]')); } catch { return []; }
-}
 function saveUsers(users: LocalUser[]) {
   localStorage.setItem('pitchcom-users', JSON.stringify(users));
 }
@@ -60,6 +49,7 @@ const ROLES = [
 
 export default function LoginPage() {
   const router = useRouter();
+  const [temporaryOpen, setTemporaryOpen] = useState(false);
   const [tab, setTab] = useState<'login' | 'signup'>('login');
   const [step, setStep] = useState<'info' | 'role' | 'coachType'>('info');
   const [selectedCoachTypes, setSelectedCoachTypes] = useState<string[]>([]);
@@ -150,82 +140,39 @@ export default function LoginPage() {
   const handleLogin = async () => {
     if (linkNeeded) { await linkGoogle(); return; }
     setError('');
-    if (!email || !password) { setError('이메일과 비밀번호를 입력해주세요'); return; }
+    if (!email || !password) { setError('아이디와 비밀번호를 입력해주세요'); return; }
     setLoading(true);
     try { await refreshDeletedAccounts(); } catch { setError('서버에서 계정 상태를 확인할 수 없습니다. 연결 후 다시 시도하세요.'); setLoading(false); return; }
-    const users = getUsers();
-    const cloudUsers = await getUsersFromCloud();
-    const merged = [...cloudUsers];
-    for (const user of withoutDeletedAccounts(users)) if (!merged.some(u => u.id === user.id)) merged.push(user);
-    saveUsers(merged);
-    const userByEmail = merged.find(u => u.email === email);
-    if (!userByEmail) { setError('존재하지 않는 계정이에요'); setLoading(false); return; }
-    if (userByEmail.authUserId) { setError('구글로 로그인해 주세요.'); setLoading(false); return; }
-    if (userByEmail.password !== password) { setError('비밀번호가 틀렸어요'); setLoading(false); return; }
-    setSession(userByEmail);
-    router.push('/home');
+    try {
+      const users: LocalUser[] = await syncRead(GLOBAL, 'users', true);
+      if (!Array.isArray(users)) throw new Error('계정 목록을 확인할 수 없습니다.');
+      const user = users.find(u => normalizedEmail(u.email) === normalizedEmail(email));
+      if (!user) throw new Error('아이디 또는 비밀번호를 확인해 주세요.');
+      if (user.authUserId) throw new Error('이 계정은 Google로 로그인해 주세요.');
+      const valid = user.temporaryCredential
+        ? await verifyTemporaryPassword(password, user.temporaryCredential)
+        : Boolean(user.password && user.password === password);
+      if (!valid) throw new Error('아이디 또는 비밀번호를 확인해 주세요.');
+      saveUsers(users); setPassword(''); setSession(user); router.push('/home');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '로그인하지 못했습니다. 다시 시도해 주세요.'); }
+    finally { setLoading(false); }
   };
 
   const handleSignupInfo = async () => {
     setError('');
     if (!name.trim()) { setError('이름을 입력해주세요'); return; }
     if (!email.trim()) { setError('이메일을 입력해주세요'); return; }
-    if (googleUser) { setStep('role'); return; }
-    if (password.length < 4) { setError('비밀번호는 4자 이상이에요'); return; }
-    setLoading(true);
-    try { await refreshDeletedAccounts(); } catch { setError('서버에서 계정 상태를 확인할 수 없습니다. 연결 후 다시 시도하세요.'); setLoading(false); return; }
-    const localUsers = getUsers();
-    if (localUsers.find(u => u.email === email)) { setError('이미 사용 중인 이메일이에요'); setLoading(false); return; }
-    // 클라우드에서도 중복 확인
-    const cloudUsers = await getUsersFromCloud();
-    if (cloudUsers.find(u => u.email === email)) {
-      // 클라우드 유저 로컬 병합
-      const merged = [...localUsers];
-      for (const cu of cloudUsers) { if (!merged.find(u => u.email === cu.email)) merged.push(cu); }
-      saveUsers(merged);
-      setError('이미 사용 중인 이메일이에요'); setLoading(false); return;
-    }
-    setLoading(false);
+    if (!googleUser) { setError('Google 로그인 또는 감독이 발급한 임시 계정을 사용해 주세요.'); return; }
     setStep('role');
   };
 
   const handleRoleSelect = (r: Role) => {
     if (r === 'coach') { setPendingRole(r); setStep('coachType'); return; }
-    createAccount(r);
+    void createAccount(r);
   };
-
   const createAccount = async (r: Role, coachTypes: string[] = []) => {
-    if (googleUser) { await createGoogleAccount(r, coachTypes); return; }
-    setLoading(true);
-    const users = getUsers();
-    const newUser: LocalUser = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      email: email.trim(),
-      password,
-      role: r,
-      ...(r === 'coach' ? { coachTypes, coachType: coachTypes.join(' · ') } : {}),
-      teamCode: '',
-      joinApproved: r === 'manager' ? true : undefined,
-    };
-    const nextUsers = [...users, newUser];
-    saveUsers(nextUsers);
-    setSession(newUser);
-    // 클라우드 기존 데이터와 병합 후 저장 (덮어쓰지 않음)
-    const cloudUsers = await getUsersFromCloud();
-    const merged = [...cloudUsers];
-    for (const u of nextUsers) {
-      const idx = merged.findIndex(cu => cu.email === u.email);
-      if (idx >= 0) merged[idx] = u; else merged.push(u);
-    }
-    await saveUsersToCloud(merged);
-    const saved = localStorage.getItem('pitchcom-session');
-    if (saved) {
-      router.push('/home');
-    } else {
-      setError('저장 오류가 발생했어요. 다시 시도해주세요.');
-      setLoading(false);
-    }
+    if (!googleUser) { setError('Google 로그인을 먼저 진행해 주세요.'); return; }
+    await createGoogleAccount(r, coachTypes);
   };
 
   const createGoogleAccount = async (r: Role, coachTypes: string[]) => {
@@ -280,28 +227,17 @@ export default function LoginPage() {
 
           <div style={{ background:'rgba(30,41,59,0.85)', backdropFilter:'blur(20px)', borderRadius:24, border:'1px solid rgba(255,255,255,0.07)', padding:'28px 24px', boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
 
-            {!googleUser && (tab === 'login' || step === 'info') && (
-              <div style={{ display:'flex', background:'#0f172a', borderRadius:12, padding:4, marginBottom:22 }}>
-                {(['login','signup'] as const).map(t => (
-                  <button key={t} onClick={() => { setTab(t); resetSignup(); setError(''); }} style={{
-                    flex:1, padding:'10px', borderRadius:9, border:'none',
-                    background: tab===t ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' : 'transparent',
-                    color: tab===t ? '#fff' : '#64748b', fontSize:14, fontWeight:700, cursor:'pointer', transition:'all 0.25s',
-                  }}>
-                    {t==='login' ? '🔑 로그인' : '✨ 회원가입'}
-                  </button>
-                ))}
-              </div>
-            )}
-
             {!googleUser && <button onClick={startGoogle} disabled={loading} style={{ ...btnPrimary, background: '#fff', color: '#1e293b', marginBottom: 18 }}>Google로 로그인</button>}
+            {!googleUser && <button type="button" aria-expanded={temporaryOpen} onClick={() => { setTemporaryOpen(!temporaryOpen); setError(''); }} disabled={loading} style={{ width: '100%', padding: 12, marginBottom: 12, border: '1px solid #475569', borderRadius: 12, background: 'transparent', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>임시 계정으로 로그인 {temporaryOpen ? '▴' : '▾'}</button>}
+            {!googleUser && !temporaryOpen && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
+            {!googleUser && temporaryOpen && <p style={{ color: '#94a3b8', fontSize: 13 }}>감독이 발급한 아이디와 비밀번호를 입력해 주세요. 기존 PitchCom 계정도 사용할 수 있어요.</p>}
             {googleUser && <p style={{ color: '#93c5fd', fontSize: 14 }}>{linkNeeded ? '기존 팀과 기록을 연결하려면 PitchCom 비밀번호를 한 번 입력해 주세요.' : '구글 인증 완료! 이름과 역할을 선택해 주세요.'}</p>}
             {googleUser && tab === 'signup' && step !== 'info' && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
             {googleUser && <button disabled={loading} onClick={async () => { await supabase.auth.signOut({ scope: 'local' }); window.location.assign('/login'); }} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', marginBottom: 12 }}>다른 계정으로 로그인</button>}
             {/* 로그인 */}
-            {tab === 'login' && (
+            {tab === 'login' && (googleUser || temporaryOpen) && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                <input type="email" readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
+                <input type="text" autoComplete="username" readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder={googleUser ? "이메일" : "아이디 또는 이메일"} style={inputStyle} />
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} placeholder="비밀번호" style={inputStyle} />
                 {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
                 <button onClick={handleLogin} disabled={loading} style={btnPrimary}>{loading ? '로그인 중...' : linkNeeded ? '기존 계정 연결하기' : '로그인 →'}</button>

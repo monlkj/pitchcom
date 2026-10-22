@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import TemporaryAccountForm from './components/TemporaryAccountForm';
 import TeamLeadership from './components/TeamLeadership';
 import { EMPTY_LEADERSHIP, type Leadership } from '../../lib/teamLeadership';
 import AccountDeletionForm from './components/AccountDeletionForm';
@@ -191,6 +192,8 @@ export default function AdminPage() {
           <p style={{ margin: '2px 0 0', fontSize: 12, color: '#475569' }}>팀 코드: {teamCode}</p>
         </div>
       </div>
+
+      <TemporaryAccountForm teamCode={teamCode} onCreated={() => { void loadMembers(teamCode); }} />
 
       {/* 가입 요청 */}
       {joinRequests.length > 0 && (
