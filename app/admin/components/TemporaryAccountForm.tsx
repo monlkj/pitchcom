@@ -25,7 +25,7 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
     if (inFlight.current) return;
     setError('');
     if (!name.trim()) { setError('이름을 입력해 주세요.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.trim().length > 254) { setError('올바른 이메일을 입력해 주세요.'); return; }
+    if (!email.trim() || /\s/.test(email.trim()) || email.trim().length > 254) { setError('아이디는 공백 없이 1~254자로 입력해 주세요.'); return; }
     if (password.length < 8 || password.length > 256) { setError('비밀번호는 8~256자로 입력해 주세요.'); return; }
     if (password !== confirmation) { setError('비밀번호와 확인 비밀번호가 일치하지 않습니다.'); return; }
     if (role === 'coach' && !coachTypes.length) { setError('코치 유형을 하나 이상 선택해 주세요.'); return; }
@@ -42,7 +42,7 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
         if (authError || data.user?.id !== actor.authUserId) throw new Error('감독 계정으로 다시 로그인해 주세요.');
       }
       const accountEmail = normalizedEmail(email);
-      if (users.some(u => normalizedEmail(u.email) === accountEmail)) throw new Error('이미 사용 중인 이메일입니다.');
+      if (users.some(u => normalizedEmail(u.email) === accountEmail)) throw new Error('이미 사용 중인 아이디 또는 이메일입니다.');
       const temporaryCredential = await hashTemporaryPassword(password);
       if (localStorage.getItem('pitchcom-session') !== raw) throw new Error('계정이나 팀이 변경되었습니다. 다시 시도해 주세요.');
       const user = { id: crypto.randomUUID(), name: name.trim(), email: accountEmail, accountType: 'temporary',
@@ -59,10 +59,10 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
   return <section style={{ marginBottom: 20, padding: 18, border: '1px solid #334155', borderRadius: 16, background: '#1e293b' }}>
     <button type="button" aria-expanded={open} onClick={() => { setOpen(!open); setIssued(null); setError(''); setPassword(''); setConfirmation(''); }} disabled={busy} style={{ background: 'none', border: 'none', color: '#93c5fd', fontWeight: 800, fontSize: 16, cursor: 'pointer' }}>임시 계정 발급 {open ? '▴' : '▾'}</button>
     {open && <>
-      <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>구글 계정 없이 사용할 선수·코치 계정을 발급해요. 발급 후에는 무소속이며, 로그인 후 팀 코드를 입력하고 해당 감독의 승인을 받아야 해요.</p>
+      <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.6 }}>구글 계정 없이 사용할 선수·코치 계정을 발급해요. 아이디는 pobi01처럼 이메일 형식이 아니어도 됩니다. 발급 후에는 무소속이며, 로그인 후 팀 코드를 입력하고 해당 감독의 승인을 받아야 해요.</p>
       <form onSubmit={issue} style={{ display: 'grid', gap: 12 }}>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>이름<input aria-label="임시 계정 이름" maxLength={60} value={name} onChange={e => setName(e.target.value)} disabled={busy} style={input} /></label>
-        <label style={{ color: '#cbd5e1', fontSize: 13 }}>이메일<input aria-label="임시 계정 이메일" type="email" autoComplete="off" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} disabled={busy} style={input} /></label>
+        <label style={{ color: '#cbd5e1', fontSize: 13 }}>아이디 (이메일도 가능)<input aria-label="임시 계정 아이디" type="text" autoCapitalize="none" autoComplete="off" placeholder="예: pobi01" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} disabled={busy} style={input} /></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>비밀번호<input aria-label="임시 계정 비밀번호" type="password" autoComplete="new-password" maxLength={256} value={password} onChange={e => setPassword(e.target.value)} disabled={busy} style={input} /><span style={{ color: '#94a3b8' }}>8자 이상 입력해 주세요.</span></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>확인 비밀번호<input aria-label="임시 계정 확인 비밀번호" type="password" autoComplete="new-password" maxLength={256} value={confirmation} onChange={e => setConfirmation(e.target.value)} disabled={busy} style={input} /></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>역할<select aria-label="임시 계정 역할" value={role} onChange={e => setRole(e.target.value as 'player' | 'coach')} disabled={busy} style={input}><option value="player">선수</option><option value="coach">코치</option></select></label>
@@ -72,7 +72,7 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
       {error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
       {issued && <div role="status" style={{ marginTop: 16, padding: 14, background: '#0f172a', borderRadius: 12, color: '#cbd5e1', overflowWrap: 'anywhere' }}>
         <strong>{issued.name}님의 임시 계정을 발급했어요.</strong>
-        <p style={{ fontSize: 13 }}>이메일: {issued.email}</p>
+        <p style={{ fontSize: 13 }}>아이디: {issued.email}</p>
         <p style={{ fontSize: 13 }}>아직 소속 팀이 없습니다. 임시 계정으로 로그인한 뒤 팀 코드를 입력하고 승인을 요청해 주세요.</p>
         <button type="button" onClick={() => setIssued(null)} style={{ marginLeft: 8, padding: 10, background: 'transparent', color: '#94a3b8', border: 0 }}>발급 정보 닫기</button>
       </div>}

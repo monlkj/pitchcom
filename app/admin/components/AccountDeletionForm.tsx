@@ -35,7 +35,7 @@ export default function AccountDeletionForm({ onDeleted }: { onDeleted: () => vo
     <summary style={{ color: '#fca5a5', fontWeight: 700, cursor: 'pointer', fontSize: 14 }}>다른 팀·무소속 계정 삭제</summary>
     <p style={{ margin: '14px 0', color: '#cbd5e1', fontSize: 12, lineHeight: 1.8 }}>선수·코치 계정에만 적용됩니다. 대상 계정의 비밀번호를 직접 확인해야 하며, 감독 계정은 삭제할 수 없습니다. 수학 문제는 실수 방지용입니다. 삭제 후 복구할 수 없습니다.</p>
     <form onSubmit={submit} style={{ display: 'grid', gap: 12 }}>
-      <label style={{ color: '#cbd5e1', fontSize: 12 }}>대상 계정 이메일<input type="text" inputMode="email" placeholder="가입 시 입력한 이메일 또는 아이디" required maxLength={254} autoComplete="off" value={email} onChange={e => setEmail(e.target.value)} style={style} /></label>
+      <label style={{ color: '#cbd5e1', fontSize: 12 }}>대상 계정 아이디 또는 이메일<input type="text" placeholder="가입 시 입력한 이메일 또는 아이디" required maxLength={254} autoComplete="off" value={email} onChange={e => setEmail(e.target.value)} style={style} /></label>
       <label style={{ color: '#cbd5e1', fontSize: 12 }}>대상 계정 비밀번호<input type={showPassword ? 'text' : 'password'} required maxLength={1024} autoComplete="off" value={password} onChange={e => setPassword(e.target.value)} style={style} /></label>
       <button type="button" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)} style={{ justifySelf: 'end', border: 0, background: 'transparent', color: '#94a3b8', fontSize: 12, cursor: 'pointer' }}>{showPassword ? '입력한 비밀번호 숨기기' : '입력한 비밀번호 보기'}</button>
       <label style={{ color: '#cbd5e1', fontSize: 12 }}>대상 소속 팀 코드 (소속이 없으면 ‘무소속’)<input required maxLength={100} value={teamCode} onChange={e => setTeamCode(e.target.value)} style={style} /></label>

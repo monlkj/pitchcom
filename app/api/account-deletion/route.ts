@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   let input;
   try { input = await request.json(); } catch { return respond('잘못된 요청입니다.', 400); }
   const { email, password, teamCode, confirmation, problems } = input ?? {};
-  if (typeof email !== 'string' || email.length > 254 || !email.trim() || typeof password !== 'string' || !password || password.length > 1024 || typeof teamCode !== 'string' || teamCode.length > 100 || !teamCode.trim()) return respond('이메일·비밀번호·팀 코드를 모두 입력하세요. 무소속은 “무소속”을 입력하세요.', 400);
+  if (typeof email !== 'string' || email.length > 254 || !email.trim() || typeof password !== 'string' || !password || password.length > 1024 || typeof teamCode !== 'string' || teamCode.length > 100 || !teamCode.trim()) return respond('아이디 또는 이메일·비밀번호·팀 코드를 모두 입력하세요. 무소속은 “무소속”을 입력하세요.', 400);
   if (confirmation !== '계정 삭제') return respond('확인 문구 “계정 삭제”를 정확히 입력하세요.', 400);
   // Arithmetic is an accidental-deletion check, not authentication or a CAPTCHA.
   if (!Array.isArray(problems) || problems.length !== 2 || !problems.every(p => p && Number.isInteger(p.a) && Number.isInteger(p.b) && p.a >= 1 && p.a <= 9 && p.b >= 1 && p.b <= 9 && Number.isInteger(p.answer) && p.answer === p.a + p.b)) return respond('덧셈 문제 두 개를 모두 맞혀 주세요.', 400);
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     }
     if (!target || matches.some(user => user.role === 'manager' || user.authUserId)) {
       failures.set(key, { count: previous && previous.until > now ? previous.count + 1 : 1, until: now + 60000 });
-      return respond('이메일·비밀번호·소속 팀 정보가 일치하지 않거나 삭제할 수 없는 계정입니다.', 400);
+      return respond('아이디 또는 이메일·비밀번호·소속 팀 정보가 일치하지 않거나 삭제할 수 없는 계정입니다.', 400);
     }
     const ids = new Set(matches.map(user => user.id));
     for (const id of ids) {
