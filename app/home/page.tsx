@@ -15,6 +15,8 @@ const MENUS = [
   { href: '/stats', emoji: '📊', label: '투구 통계', desc: '타자·투수 기록 조회 및 분석', color: '#ef4444' },
   { href: '/team', emoji: '👥', label: '팀/선수 관리', desc: '팀과 선수 등록·기록 관리', color: '#f59e0b' },
   { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '채팅·공지·투표·팀 달력', color: '#8b5cf6' },
+  { href: '/tactics', emoji: '📋', label: '작전판', desc: '수비 위치와 이동 방향 공유', color: '#06b6d4' },
+  { href: '/condition', emoji: '💪', label: '컨디션', desc: '오늘의 상태 입력·선수 현황 확인', color: '#10b981' },
 ];
 
 export default function Home() {

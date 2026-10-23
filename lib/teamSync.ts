@@ -13,7 +13,7 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
   if (key !== 'join-requests' && !canUseTeam(teamCode)) return null;
   try {
     const query = supabase.from('team_shared_data').select('data').eq('team_code', teamCode).eq('data_key', key);
-    const { data, error } = key === 'leadership' ? await query.maybeSingle() : await query.single();
+    const { data, error } = (key === 'leadership' || key === 'tactics' || key.startsWith('condition:')) ? await query.maybeSingle() : await query.single();
     if (error) { if (strict) throw error; return null; }
     if (!data || (key !== 'join-requests' && !canUseTeam(teamCode))) return null;
     if (teamCode === '__global__' && key === 'users') {
@@ -26,7 +26,7 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
 
 export async function syncWrite(teamCode: string, key: string, value: any, strict = false): Promise<void> {
   if (!supabase || !teamCode) { if (strict) throw new Error('팀 변경을 저장하려면 서버 연결이 필요합니다.'); return; }
-  if (key !== 'join-requests' && !canUseTeam(teamCode)) return;
+  if (key !== 'join-requests' && !canUseTeam(teamCode)) { if (strict) throw new Error('현재 팀에서 저장할 권한이 없습니다.'); return; }
   try {
     if (teamCode === '__global__' && key === 'users') {
       const deleted = await refreshDeletedAccounts();
