@@ -24,7 +24,6 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
   const [playerTitle, setPlayerTitle] = useState('선수');
-  const [managedCodes, setManagedCodes] = useState<string[]>([]);
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [coachType, setCoachType] = useState('');
@@ -73,13 +72,6 @@ export default function Home() {
     setTeamCode(session.teamCode ?? '');
     setJoinApproved(session.joinApproved ?? null);
     setReady(true);
-    if (session.role === 'manager') {
-      setManagedCodes(managedTeams([], session));
-      syncRead('__global__', 'users').then(users => {
-        const current = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
-        if (current.id === session.id) setManagedCodes(managedTeams(Array.isArray(users) ? users : [], session));
-      });
-    }
     // 감독: 가입 요청 수 확인
     if (session.role === 'manager' && session.teamCode) {
       syncRead(session.teamCode, 'join-requests').then((reqs: any) => {
@@ -141,20 +133,19 @@ export default function Home() {
       for (const user of withoutDeletedAccounts(localUsers)) if (!users.some(u => u.id === user.id)) users.push(user);
       const me = users.find(u => u.id === session.id) ?? users.find(u => sameAccount(u, session)) ?? session;
       const isManager = session.role === 'manager';
-      if (leave && !isManager) throw new Error('감독만 팀을 전환할 수 있습니다.');
       const managed = managedTeams(users, session);
       const owner = users.find(u => u.role === 'manager' && !sameAccount(u, session) && managedTeams([], u).includes(code));
-      if (!isManager && !users.some(u => u.role === 'manager' && managedTeams([], u).includes(code))) {
+      if (!isManager && code && !users.some(u => u.role === 'manager' && managedTeams([], u).includes(code))) {
         setCodeError('존재하지 않는 팀 코드예요'); return;
       }
       if (isManager && code && owner) { setCodeError('다른 감독이 사용 중인 팀 코드예요'); return; }
       migrateTeamCache();
-      const requestId = isManager ? undefined : crypto.randomUUID();
+      const requestId = isManager || !code ? undefined : crypto.randomUUID();
       const next = { ...me, ...session, teamCode: code, joinApproved: isManager, joinRequestId: requestId,
         ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, ...(code ? [code] : [])])) } : {}) };
       const updated = users.filter(u => u.id !== session.id).map(u => isManager && u.role === 'manager' && sameAccount(u, session)
         ? { ...u, teamCode: code, joinApproved: true, managedTeamCodes: next.managedTeamCodes } : u).concat(next);
-      if (!isManager) {
+      if (!isManager && code) {
         const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
         const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, coachTypes: session.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
         await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
@@ -278,7 +269,7 @@ export default function Home() {
             {/* 감독 팀코드 설정 카드 */}
             {!teamCode && userRole === 'manager' && (
               <div style={{ marginBottom: 24, padding: '20px', borderRadius: 18, background: '#1e293b', border: '1.5px solid #3b82f644' }}>
-                <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: '#60a5fa' }}>🧢 팀 코드를 만드세요</p>
+                <p style={{ margin: '0 0 6px', fontSize: 14, fontWeight: 800, color: '#60a5fa' }}>🧢 팀 코드를 입력하세요</p>
                 <p style={{ margin: '0 0 14px', fontSize: 12, color: '#475569' }}>팀원들이 이 코드로 합류해요</p>
                 <div style={{ display: 'flex', gap: 8 }}>
                   <input
@@ -298,7 +289,7 @@ export default function Home() {
                     padding: '12px 20px', borderRadius: 12, border: 'none',
                     background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                     color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
-                  }}>만들기</button>
+                  }}>입장</button>
                 </div>
                 {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
               </div>
@@ -335,18 +326,13 @@ export default function Home() {
                     </button>
                   </div>
                 )}
+                <p style={{ margin: '12px 0 8px', color: '#94a3b8', fontSize: 12, lineHeight: 1.7 }}>
+                  {userRole === 'manager' ? '다른 팀 코드로 이동해도 기록은 팀별로 보관됩니다. 원래 코드를 다시 입력하면 승인 없이 돌아올 수 있어요.' : '팀에서 나가거나 다른 팀으로 이동하면, 다시 들어올 때 감독의 승인을 받아야 해요.'}
+                </p>
+                <button disabled={savingCode} onClick={() => saveCode('', true)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}>팀에서 나가기</button>
+                {!editingCode && codeError && <p role="alert" style={{ marginTop: 10, color: '#f87171', fontSize: 12 }}>{codeError}</p>}
               </div>
             )}
-
-            {userRole === 'manager' && <section style={{ marginBottom: 20, padding: '16px 18px', borderRadius: 16, background: '#1e293b', border: '1px solid #334155' }}>
-              <h2 style={{ margin: '0 0 10px', fontSize: 14, color: '#f8fafc' }}>내 팀</h2>
-              <p style={{ margin: '0 0 12px', color: '#94a3b8', fontSize: 12, lineHeight: 1.7 }}>새 팀으로 이동하거나 나가도 기존 팀은 유지됩니다. 아래 팀을 누르면 승인 없이 다시 들어갑니다.</p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {managedCodes.map(code => <button key={code} aria-label={`${code}팀으로 이동`} disabled={savingCode || teamCode === code} onClick={() => saveCode(code)} style={{ padding: '9px 14px', borderRadius: 10, border: '1px solid #3b82f655', background: teamCode === code ? '#1d4ed8' : '#0f172a', color: '#f8fafc', cursor: 'pointer' }}>{code}{teamCode === code ? ' · 접속 중' : ''}</button>)}
-              </div>
-              {teamCode && <button disabled={savingCode} onClick={() => saveCode('', true)} style={{ marginTop: 12, padding: '8px 12px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}>팀에서 나가기</button>}
-              {!editingCode && codeError && <p role="alert" style={{ marginTop: 10, color: '#f87171', fontSize: 12 }}>{codeError}</p>}
-            </section>}
 
             {/* 메뉴 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
