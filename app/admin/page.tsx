@@ -16,6 +16,7 @@ interface Member {
   name: string;
   email: string;
   role: string;
+  authUserId?: string;
   coachType?: string;
   coachTypes?: string[];
   teamCode: string;
@@ -40,6 +41,17 @@ const ROLE_LABEL: Record<string, string> = {
   coach: '📋 코치',
   player: '⚾ 선수',
 };
+
+function AccountTypeBadge({ member }: { member: Member }) {
+  const google = Boolean(member.authUserId?.trim());
+  const label = google ? 'Google 계정' : '임시 계정';
+  return <span aria-label={`계정 유형: ${label}`} style={{
+    display: 'inline-block', padding: '3px 7px', borderRadius: 6,
+    background: google ? '#172e50' : '#352a19', color: google ? '#93c5fd' : '#fcd34d',
+    border: `1px solid ${google ? '#3b82f655' : '#f59e0b44'}`,
+    fontSize: 10, fontWeight: 700, lineHeight: 1.4, whiteSpace: 'nowrap',
+  }}>{label}</span>;
+}
 
 export default function AdminPage() {
   const router = useRouter();
@@ -240,9 +252,12 @@ export default function AdminPage() {
           <p style={{ margin: '0 0 8px', fontSize: 12, color: '#475569', fontWeight: 700 }}>내 계정</p>
           <div style={{ padding: '14px 18px', borderRadius: 14, background: '#1e3a5f', border: '1px solid #1e40af', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ width: 38, height: 38, borderRadius: 12, background: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🧢</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc' }}>{me.name}</div>
-              <div style={{ fontSize: 12, color: '#60a5fa' }}>{me.email}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7 }}>
+                <span style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', overflowWrap: 'anywhere' }}>{me.name}</span>
+                <AccountTypeBadge member={me} />
+              </div>
+              <div style={{ fontSize: 12, color: '#60a5fa', overflowWrap: 'anywhere' }}>{me.email}</div>
             </div>
             <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700 }}>감독</span>
           </div>
@@ -268,7 +283,10 @@ export default function AdminPage() {
                   {m.role === 'manager' ? '🧢' : m.role === 'coach' ? '📋' : '⚾'}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc' }}>{m.name}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7 }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, color: '#f8fafc', overflowWrap: 'anywhere' }}>{m.name}</span>
+                    <AccountTypeBadge member={m} />
+                  </div>
                   <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
                 <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (m.role === 'player' && leadership.captainId === m.id ? '⭐ 주장' : m.role === 'player' && leadership.viceCaptainId === m.id ? '🌟 부주장' : ROLE_LABEL[m.role] ?? m.role)}</span>
