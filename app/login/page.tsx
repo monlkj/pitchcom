@@ -124,8 +124,9 @@ export default function LoginPage() {
       if (matches.length !== 1) throw new Error('기존 계정 정보를 확인할 수 없습니다.');
       const existing = matches[0];
       if (existing.authUserId && existing.authUserId !== googleUser.id) throw new Error('이미 다른 구글 계정에 연결되어 있습니다.');
-      if (!existing.password || existing.password !== password) throw new Error('기존 PitchCom 비밀번호가 맞지 않습니다.');
-      const { password: _legacyPassword, ...profile } = existing;
+      const valid = existing.temporaryCredential ? await verifyTemporaryPassword(password, existing.temporaryCredential) : Boolean(existing.password && existing.password === password);
+      if (!valid) throw new Error('기존 PitchCom 비밀번호가 맞지 않습니다.');
+      const { password: _legacyPassword, temporaryCredential: _temporaryCredential, ...profile } = existing;
       const linked = { ...profile, authUserId: googleUser.id };
       const updated = users.map(u => u.id === existing.id ? linked : u);
       await syncWrite(GLOBAL, 'users', updated, true);

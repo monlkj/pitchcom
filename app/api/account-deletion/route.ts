@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
+import { verifyTemporaryPassword } from '../../../lib/temporaryAccounts';
 import { supabase } from '../../../lib/supabase';
 
 export const runtime = 'nodejs';
@@ -37,8 +38,15 @@ export async function POST(request: Request) {
     const users: any[] = data.data;
     const matches = users.filter(user => typeof user.email === 'string' && emailKey(user.email) === emailKey(email));
     const expectedCode = teamCode.trim() === '무소속' ? '' : teamCode.trim().toUpperCase();
-    const target = matches.find(user => ['coach', 'player'].includes(user.role) && user.teamCode === expectedCode && typeof user.password === 'string' && timingSafeEqual(digest(user.password), digest(password)));
-    if (!target || matches.some(user => user.role === 'manager')) {
+    let target;
+    for (const user of matches) {
+      if (!['coach', 'player'].includes(user.role) || user.teamCode !== expectedCode || user.authUserId) continue;
+      const valid = user.temporaryCredential
+        ? await verifyTemporaryPassword(password, user.temporaryCredential)
+        : typeof user.password === 'string' && timingSafeEqual(digest(user.password), digest(password));
+      if (valid) { target = user; break; }
+    }
+    if (!target || matches.some(user => user.role === 'manager' || user.authUserId)) {
       failures.set(key, { count: previous && previous.until > now ? previous.count + 1 : 1, until: now + 60000 });
       return respond('이메일·비밀번호·소속 팀 정보가 일치하지 않거나 삭제할 수 없는 계정입니다.', 400);
     }

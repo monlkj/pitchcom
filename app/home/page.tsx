@@ -244,7 +244,7 @@ export default function Home() {
           <div style={{ padding: '36px 24px', maxWidth: 480, margin: '0 auto' }}>
             <div style={{ marginBottom: 28 }}>
               <h1 style={{ margin: 0, fontSize: 26, fontWeight: 900, color: '#f8fafc' }}>팀 코드 입력</h1>
-              <p style={{ margin: '6px 0 0', fontSize: 13, color: '#475569' }}>감독님께 받은 팀 코드를 입력하면 바로 시작할 수 있어요</p>
+              <p style={{ margin: '6px 0 0', fontSize: 13, color: '#475569' }}>팀 코드를 입력하고 감독님의 승인을 받아 주세요</p>
             </div>
             <div style={{ background: '#1e293b', borderRadius: 20, padding: '24px 20px', border: '1px solid #334155' }}>
               <input
