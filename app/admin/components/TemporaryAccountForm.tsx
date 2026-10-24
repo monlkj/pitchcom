@@ -26,7 +26,7 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
     setError('');
     if (!name.trim()) { setError('이름을 입력해 주세요.'); return; }
     if (!email.trim() || /\s/.test(email.trim()) || email.trim().length > 254) { setError('아이디는 공백 없이 1~254자로 입력해 주세요.'); return; }
-    if (password.length < 8 || password.length > 256) { setError('비밀번호는 8~256자로 입력해 주세요.'); return; }
+    if (password.length < 4 || password.length > 256) { setError('비밀번호는 4~256자로 입력해 주세요.'); return; }
     if (password !== confirmation) { setError('비밀번호와 확인 비밀번호가 일치하지 않습니다.'); return; }
     if (role === 'coach' && !coachTypes.length) { setError('코치 유형을 하나 이상 선택해 주세요.'); return; }
     inFlight.current = true; setBusy(true); setIssued(null);
@@ -63,7 +63,7 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
       <form onSubmit={issue} style={{ display: 'grid', gap: 12 }}>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>이름<input aria-label="임시 계정 이름" maxLength={60} value={name} onChange={e => setName(e.target.value)} disabled={busy} style={input} /></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>아이디 (이메일도 가능)<input aria-label="임시 계정 아이디" type="text" autoCapitalize="none" autoComplete="off" placeholder="예: pobi01" maxLength={254} value={email} onChange={e => setEmail(e.target.value)} disabled={busy} style={input} /></label>
-        <label style={{ color: '#cbd5e1', fontSize: 13 }}>비밀번호<input aria-label="임시 계정 비밀번호" type="password" autoComplete="new-password" maxLength={256} value={password} onChange={e => setPassword(e.target.value)} disabled={busy} style={input} /><span style={{ color: '#94a3b8' }}>8자 이상 입력해 주세요.</span></label>
+        <label style={{ color: '#cbd5e1', fontSize: 13 }}>비밀번호<input aria-label="임시 계정 비밀번호" type="password" autoComplete="new-password" maxLength={256} value={password} onChange={e => setPassword(e.target.value)} disabled={busy} style={input} /><span style={{ color: '#94a3b8' }}>4자 이상 입력해 주세요.</span></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>확인 비밀번호<input aria-label="임시 계정 확인 비밀번호" type="password" autoComplete="new-password" maxLength={256} value={confirmation} onChange={e => setConfirmation(e.target.value)} disabled={busy} style={input} /></label>
         <label style={{ color: '#cbd5e1', fontSize: 13 }}>역할<select aria-label="임시 계정 역할" value={role} onChange={e => setRole(e.target.value as 'player' | 'coach')} disabled={busy} style={input}><option value="player">선수</option><option value="coach">코치</option></select></label>
         {role === 'coach' && <fieldset style={{ border: '1px solid #475569', borderRadius: 10, color: '#cbd5e1' }}><legend>코치 유형 (여러 개 선택 가능)</legend>{COACH_TYPES.map(type => <label key={type} style={{ display: 'block', padding: 6 }}><input type="checkbox" checked={coachTypes.includes(type)} disabled={busy} onChange={() => setCoachTypes(current => current.includes(type) ? current.filter(v => v !== type) : [...current, type])} /> {type}</label>)}</fieldset>}
