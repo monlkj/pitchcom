@@ -30,7 +30,7 @@ export default function TacticsPage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [id, setId] = useState(''); const [title, setTitle] = useState(''); const [notes, setNotes] = useState('');
   const [markers, setMarkers] = useState<Marker[]>(initial); const [arrows, setArrows] = useState<Arrow[]>([]);
-  const [selected, setSelected] = useState('P'); const [roster, setRoster] = useState<string[]>([]);
+  const [selected, setSelected] = useState('P');
   const [routeKind, setRouteKind] = useState<RouteKind>('hit');
   const [draw, setDraw] = useState(false); const [preview, setPreview] = useState<Arrow | null>(null);
   const [busy, setBusy] = useState(false); const [loaded, setLoaded] = useState(false);
@@ -38,16 +38,14 @@ export default function TacticsPage() {
   const svg = useRef<SVGSVGElement>(null); const saving = useRef(false);
   const gesture = useRef<{ pointer: number; marker?: string; start?: Point; kind?: RouteKind } | null>(null);
   const canEdit = session?.role === 'manager' || session?.role === 'coach';
-  const current = markers.find(marker => marker.id === selected);
   useEffect(() => {
     let active = true;
     void (async () => {
       try {
         const s = featureSession(); setSession(s);
-        const [saved, teams] = await Promise.all([syncRead(s.teamCode, 'tactics', true), syncRead(s.teamCode, 'teams')]);
+        const saved = await syncRead(s.teamCode, 'tactics', true);
         sameFeatureSession(s); if (!active) return;
         setBoards(Array.isArray(saved) ? saved : []);
-        setRoster(Array.isArray(teams) ? [...new Set<string>(teams.flatMap(t => (t.players || []).map((p: { name: string }) => p.name)))] : []);
         if (Array.isArray(saved) && saved.length) open(saved[0]);
         setLoaded(true);
       } catch { if (active) setError('작전판을 불러오지 못했습니다. 연결을 확인하고 다시 열어 주세요.'); }
@@ -141,7 +139,6 @@ export default function TacticsPage() {
       <section style={{ ...ui.card, marginTop: 16 }}>
         {canEdit ? <>
           <label style={{ fontSize: 13 }}>작전 이름<input aria-label="작전 이름" maxLength={60} value={title} disabled={busy} onChange={e => { setTitle(e.target.value); setDirty(true); }} placeholder="예: 무사 1루 번트 수비" style={{ ...ui.input, margin: '6px 0 12px' }} /></label>
-          {current && current.id !== 'P' && <label style={{ fontSize: 13 }}>{current.label} 이름<input aria-label="선택한 포지션 이름" list="tactics-roster" maxLength={15} value={current?.player || ''} disabled={busy} onChange={e => { setMarkers(old => old.map(m => m.id === selected ? { ...m, player: e.target.value } : m)); setDirty(true); }} placeholder="선수 이름 (선택)" style={{ ...ui.input, margin: '6px 0 12px' }} /><datalist id="tactics-roster">{roster.map(name => <option key={name} value={name} />)}</datalist></label>}
           <label style={{ fontSize: 13 }}>작전 설명<textarea aria-label="작전 설명" value={notes} maxLength={1000} disabled={busy} onChange={e => { setNotes(e.target.value); setDirty(true); }} rows={3} placeholder="각 포지션의 움직임을 적어 주세요." style={{ ...ui.input, margin: '6px 0 12px', resize: 'vertical' }} /></label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}><button disabled={busy} onClick={save} style={ui.primary}>{busy ? '저장 중…' : '작전 저장'}</button><button disabled={busy} onClick={fresh} style={ui.button}>새 작전</button><button disabled={busy} onClick={() => { setMarkers(initial()); setArrows([]); setDirty(true); }} style={ui.button}>배치 초기화</button>{id && <button disabled={busy} onClick={remove} style={{ ...ui.button, color: '#fca5a5' }}>작전 삭제</button>}</div>
           {dirty && <p style={{ color: '#fbbf24', fontSize: 12 }}>저장하지 않은 변경 사항이 있어요.</p>}
