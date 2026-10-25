@@ -23,7 +23,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
     let checking = false;
     setAllowedPath(''); setConnectionError(false);
     if (path === '/') { router.replace('/login'); return; }
-    if (path === '/login') { setAllowedPath(path); return; }
+    if (path === '/login' || path === '/account-transfer/google') { setAllowedPath(path); return; }
     const check = async () => {
       if (checking) return;
       checking = true;
@@ -55,7 +55,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
         const users = await syncRead('__global__', 'users', true);
         if (!active || localStorage.getItem('pitchcom-session') !== rawSession) return;
         const remote = Array.isArray(users) ? users.find((user: { id: string }) => user.id === session.id) : null;
-        if (!remote || (remote.authUserId && remote.authUserId !== session.authUserId)) {
+        if (!remote || remote.email !== session.email || (remote.identityVersion ?? 0) !== (session.identityVersion ?? 0) || remote.authUserId !== session.authUserId) {
           localStorage.removeItem('pitchcom-session'); setAllowedPath(''); router.replace('/login'); return;
         }
         if (remote && (session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.joinRequestId !== remote.joinRequestId || session.removalNotice?.id !== remote.removalNotice?.id)) {
@@ -64,7 +64,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
           window.location.assign('/home'); return;
         }
         migrateTeamCache();
-        if (path !== '/home' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
+        if (path !== '/home' && path !== '/account-transfer' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
           router.replace('/home'); return;
         }
         setConnectionError(false); setAllowedPath(path);
@@ -72,6 +72,8 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
       finally { checking = false; }
     };
     void check();
+    // The transfer API re-verifies both identities; its success screen must survive intentional logout.
+    if (path === '/account-transfer') return () => { active = false; };
     const timer = window.setInterval(check, 15000);
     window.addEventListener('focus', check);
     window.addEventListener('online', check);

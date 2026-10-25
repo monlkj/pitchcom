@@ -1,3 +1,4 @@
+import { activeProfiles, preserveIdentityChanges } from './accountIdentity';
 import { supabase } from './supabase';
 import { isDeletedAccount, refreshDeletedAccounts } from './accountDeletion';
 
@@ -18,7 +19,7 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
     if (!data || (key !== 'join-requests' && !canUseTeam(teamCode))) return null;
     if (teamCode === '__global__' && key === 'users') {
       const deleted = await refreshDeletedAccounts();
-      return Array.isArray(data.data) ? data.data.filter((user: { id: string }) => !deleted.has(user.id)) : data.data;
+      return Array.isArray(data.data) ? activeProfiles(data.data.filter((user: { id: string }) => !deleted.has(user.id))) : data.data;
     }
     return (data as any).data;
   } catch (error) { if (strict) throw error; return null; }
@@ -29,6 +30,9 @@ export async function syncWrite(teamCode: string, key: string, value: any, stric
   if (key !== 'join-requests' && !canUseTeam(teamCode)) { if (strict) throw new Error('현재 팀에서 저장할 권한이 없습니다.'); return; }
   try {
     if (teamCode === '__global__' && key === 'users') {
+      const latest = await supabase.from('team_shared_data').select('data').eq('team_code', '__global__').eq('data_key', 'users').maybeSingle();
+      if (latest.error) throw latest.error;
+      if (Array.isArray(latest.data?.data)) value = preserveIdentityChanges(value, latest.data.data);
       const deleted = await refreshDeletedAccounts();
       value = value.filter((user: { id: string }) => !deleted.has(user.id));
     }

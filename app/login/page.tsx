@@ -24,6 +24,7 @@ interface LocalUser {
   temporaryCredential?: TemporaryCredential;
   accountType?: 'temporary';
   createdAt?: string;
+  identityVersion?: number;
   role: Role;
   coachType?: string;
   coachTypes?: string[];
@@ -40,7 +41,7 @@ function saveUsers(users: LocalUser[]) {
 }
 function setSession(user: LocalUser, authUserId?: string) {
   migrateTeamCache();
-  localStorage.setItem('pitchcom-session', JSON.stringify({ authUserId, id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
+  localStorage.setItem('pitchcom-session', JSON.stringify({ identityVersion: user.identityVersion, authUserId, id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
 }
 
 const ROLES = [
@@ -234,7 +235,7 @@ export default function LoginPage() {
       if (authError || data.user?.id !== googleUser?.id || !data.user?.email) throw new Error('구글 로그인을 다시 진행해 주세요.');
       const users: LocalUser[] = await syncRead(GLOBAL, 'users', true);
       if (users.some(u => normalizedEmail(u.email) === normalizedEmail(data.user.email))) throw new Error('기존 계정이 있습니다. 구글 로그인을 다시 눌러 연결해 주세요.');
-      const user: LocalUser = { id: data.user.id, authUserId: data.user.id, name: name.trim(), email: data.user.email,
+      const user: LocalUser = { id: crypto.randomUUID(), authUserId: data.user.id, name: name.trim(), email: data.user.email,
         role: r, teamCode: '', joinApproved: r === 'manager' ? true : undefined,
         ...(r === 'coach' ? { coachTypes, coachType: coachTypes.join(' · ') } : {}) };
       await syncWrite(GLOBAL, 'users', [...users, user], true);
