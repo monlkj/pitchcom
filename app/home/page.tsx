@@ -17,6 +17,7 @@ const MENUS = [
   { href: '/messages', emoji: '💬', label: '팀 메시지', desc: '채팅·공지·투표·팀 달력', color: '#8b5cf6' },
   { href: '/tactics', emoji: '📋', label: '작전판', desc: '수비 위치와 이동 방향 공유', color: '#06b6d4' },
   { href: '/condition', emoji: '💪', label: '컨디션', desc: '오늘의 상태 입력·선수 현황 확인', color: '#10b981' },
+  { href: '/hall-of-fame', emoji: '🏅', label: '명예의 전당', desc: '팀의 수상·기념 기록 모아보기', color: '#eab308' },
 ];
 
 export default function Home() {

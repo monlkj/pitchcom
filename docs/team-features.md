@@ -24,3 +24,11 @@ New empty tactics/condition rows use `maybeSingle()` to distinguish a missing ro
 - Coach editing controls and player read-only display.
 - Independent player/date condition writes, sleep/fatigue values, reload, staff summary and empty previous date.
 - Separate team UI, 320/390-pixel layouts, and a simulated failed condition write that left the saved record unchanged.
+
+## Hall of fame
+
+`/hall-of-fame` adds team-scoped award and milestone cards. Directors and coaches register, edit and delete; approved team members browse, search recipient/title/description and filter categories. Categories include monthly player, game MVP, first record, milestone, team contribution and other. Each card snapshots the recipient name, title, achievement date and explanation so historical awards remain readable if the roster changes. Names can be entered manually or suggested from roster/account names. Entries sort by achievement date and creation time, newest first.
+
+The `hall-of-fame` shared-data row uses `maybeSingle()` for a new team's empty state. Mutations re-read the latest list and use the shared staff/membership check before strict persistence; editing preserves original creation metadata and unrelated records. A record removed by another editor is not silently recreated by edit. As with tactics, simultaneous shared-row writes retain the existing last-write-wins limitation. The legacy database authorization limitations above also apply; no new policy or private-data guarantee is introduced.
+
+Validation covers empty state, required title/recipient, roster suggestions, registration and reload, coach edits, preserving another editor's additional record, search/filter, player read-only controls, second-team isolation in the UI, narrow layouts, rejected writes without success messages, deletion/refresh and home navigation.
