@@ -289,7 +289,7 @@ export default function LoginPage() {
             {!googleUser && tab === 'login' && <button type="button" disabled={loading} onClick={() => { setTab('signup'); resetSignup(); setSelectedCoachTypes([]); setTemporaryOpen(false); setPassword(''); setConfirmation(''); }} style={{ ...btnPrimary, marginBottom: 12 }}>임시 계정으로 회원가입</button>}
             {!googleUser && tab === 'signup' && <div style={{ marginBottom: 18 }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#f8fafc' }}>임시 계정 회원가입</h2>
-              <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.7 }}>구글 없이 감독·코치·선수 모두 가입할 수 있어요. 아이디는 pobi01처럼 입력해도 돼요.</p>
+              <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.7 }}>구글 없이 감독·코치·선수 모두 가입할 수 있어요. 아이디 또는 이메일을 입력해 주세요.</p>
               <button disabled={loading} onClick={() => { setTab('login'); setTemporaryOpen(true); resetSignup(); setPassword(''); setConfirmation(''); }} style={{ background: 'transparent', border: 'none', padding: 0, color: '#93c5fd', cursor: 'pointer' }}>← 로그인으로 돌아가기</button>
             </div>}
             {/* 로그인 */}
@@ -306,7 +306,7 @@ export default function LoginPage() {
             {tab === 'signup' && step === 'info' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
                 <input type="text" aria-label="가입 이름" maxLength={60} disabled={loading} value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={inputStyle} autoFocus />
-                <input type={googleUser ? "email" : "text"} aria-label="가입 아이디" autoComplete="username" autoCapitalize="none" maxLength={254} disabled={loading} readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder={googleUser ? "이메일" : "아이디 또는 이메일 (예: pobi01)"} style={inputStyle} />
+                <input type={googleUser ? "email" : "text"} aria-label="가입 아이디" autoComplete="username" autoCapitalize="none" maxLength={254} disabled={loading} readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder={googleUser ? "이메일" : "예)example@naver.com"} style={inputStyle} />
                 {!googleUser && <>
                   <input type="password" aria-label="가입 비밀번호" autoComplete="new-password" maxLength={256} disabled={loading} value={password} onChange={e=>setPassword(e.target.value)} placeholder="비밀번호 (4자 이상)" style={inputStyle} />
                   <input type="password" aria-label="가입 확인 비밀번호" autoComplete="new-password" maxLength={256} disabled={loading} value={confirmation} onChange={e=>setConfirmation(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSignupInfo()} placeholder="확인 비밀번호" style={inputStyle} />
