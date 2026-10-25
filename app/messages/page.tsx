@@ -1,20 +1,13 @@
 'use client';
 
+import { featureSession } from '../../lib/teamFeatures';
+import { readChat, sendChat, hideChat, deleteChatForEveryone, type ChatMsg } from '../../lib/chatMessages';
 import TeamCalendar from '../calendar/TeamCalendar';
 import { teamStorage } from '../../lib/teamStorage';
 
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
-
-interface ChatMsg {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorRole: string;
-  text: string;
-  createdAt: string;
-}
 
 interface Notice {
   id: string;
@@ -47,6 +40,17 @@ export default function MessagesPage() {
   const [myName, setMyName] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<string[]>([]);
+  const [chatReady, setChatReady] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [chatLoadError, setChatLoadError] = useState('');
+  const [chatStatus, setChatStatus] = useState('');
+  const [selectedMessage, setSelectedMessage] = useState<ChatMsg | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const chatOperation = useRef(false);
+  const chatVersion = useRef(0);
+  const visibleMessages = messages.filter(message => !hiddenIds.includes(message.id));
   const [notices, setNotices] = useState<Notice[]>([]);
   const [polls, setPolls] = useState<Poll[]>([]);
   const [syncing, setSyncing] = useState(false);
@@ -67,7 +71,8 @@ export default function MessagesPage() {
     if (!raw) { router.push('/login'); return; }
     const s = JSON.parse(raw);
     setRole(s.role ?? '');
-    setMyId(s.id ?? '');
+    setMyId(String(s.id ?? ''));
+    setHiddenIds(JSON.parse(teamStorage.getItem(`pitchcom-message-hidden:${s.id}`) || '[]'));
     setMyName(s.name ?? '');
     setTeamCode(s.teamCode ?? '');
 
@@ -78,12 +83,10 @@ export default function MessagesPage() {
     if (s.teamCode) {
       setSyncing(true);
       Promise.all([
-        syncRead(s.teamCode, 'messages'),
         syncRead(s.teamCode, 'notices'),
         syncRead(s.teamCode, 'polls'),
-      ]).then(([rm, rn, rp]) => {
+      ]).then(([rn, rp]) => {
         setSyncing(false);
-        if (Array.isArray(rm)) { setMessages(rm); teamStorage.setItem('pitchcom-messages', JSON.stringify(rm)); }
         if (Array.isArray(rn)) { setNotices(rn); teamStorage.setItem('pitchcom-notices', JSON.stringify(rn)); }
         if (Array.isArray(rp)) { setPolls(rp); teamStorage.setItem('pitchcom-polls', JSON.stringify(rp)); }
       });
@@ -94,11 +97,37 @@ export default function MessagesPage() {
     if (tab === 'chat') bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, tab]);
 
-  const saveMessages = async (next: ChatMsg[]) => {
-    setMessages(next);
-    teamStorage.setItem('pitchcom-messages', JSON.stringify(next));
-    if (teamCode) await syncWrite(teamCode, 'messages', next);
+  const applyChat = (data: Awaited<ReturnType<typeof readChat>>, id: string) => {
+    setMessages(previous => JSON.stringify(previous) === JSON.stringify(data.messages) ? previous : data.messages);
+    setHiddenIds(previous => JSON.stringify(previous) === JSON.stringify(data.hidden) ? previous : data.hidden);
+    teamStorage.setItem('pitchcom-messages', JSON.stringify(data.messages));
+    teamStorage.setItem(`pitchcom-message-hidden:${id}`, JSON.stringify(data.hidden));
   };
+  useEffect(() => {
+    if (!teamCode || !myId || tab !== 'chat') return;
+    let active = true; let reading = false;
+    const refresh = async () => {
+      if (reading || chatOperation.current) return;
+      reading = true; const version = chatVersion.current;
+      try {
+        const session = featureSession();
+        if (session.id !== myId || session.teamCode !== teamCode) return;
+        const data = await readChat(session);
+        if (active && version === chatVersion.current) { applyChat(data, myId); setChatReady(true); setChatLoadError(''); }
+      } catch { if (active && version === chatVersion.current) setChatLoadError('채팅을 새로 불러오지 못했습니다. 인터넷 연결을 확인해 주세요.'); }
+      finally { reading = false; }
+    };
+    void refresh();
+    const timer = window.setInterval(refresh, 5000);
+    window.addEventListener('focus', refresh); window.addEventListener('online', refresh);
+    return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); };
+  }, [teamCode, myId, tab]);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    if (selectedMessage && !dialog.open) dialog.showModal();
+    else if (!selectedMessage && dialog.open) dialog.close();
+  }, [selectedMessage]);
 
   const saveNotices = async (next: Notice[]) => {
     setNotices(next);
@@ -114,14 +143,21 @@ export default function MessagesPage() {
 
   const sendMessage = async () => {
     const text = inputText.trim();
-    if (!text) return;
-    const msg: ChatMsg = { id: Date.now().toString(), authorId: myId, authorName: myName, authorRole: role, text, createdAt: new Date().toISOString() };
-    await saveMessages([...messages, msg]);
-    setInputText('');
+    if (!text || !chatReady || chatOperation.current) return;
+    chatOperation.current = true; chatVersion.current++; setChatBusy(true); setChatError(''); setChatStatus('');
+    try { const data = await sendChat(text); applyChat(data, myId); setInputText(''); }
+    catch { setChatError('메시지를 보내지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.'); }
+    finally { chatOperation.current = false; setChatBusy(false); }
   };
-
-  const deleteMessage = async (id: string) => {
-    await saveMessages(messages.filter(m => m.id !== id));
+  const deleteMessage = async (scope: 'me' | 'everyone') => {
+    if (!selectedMessage || !chatReady || chatOperation.current) return;
+    chatOperation.current = true; chatVersion.current++; setChatBusy(true); setChatError(''); setChatStatus('');
+    try {
+      const data = scope === 'me' ? await hideChat(selectedMessage.id) : await deleteChatForEveryone(selectedMessage.id);
+      applyChat(data, myId); setSelectedMessage(null);
+      setChatStatus(scope === 'me' ? '나에게서만 메시지를 삭제했어요.' : '모두에게서 메시지를 삭제했어요.');
+    } catch { setChatError('삭제를 완료하지 못했습니다. 연결 상태를 확인하고 다시 시도해 주세요.'); }
+    finally { chatOperation.current = false; setChatBusy(false); }
   };
 
   const addNotice = async () => {
@@ -222,44 +258,44 @@ export default function MessagesPage() {
         </div>
       </div>
 
+      {tab === 'chat' && (chatError || chatLoadError) && <p role="alert" style={{ color: '#fca5a5', fontSize: 13, padding: '0 16px' }}>{chatError || chatLoadError}</p>}
+      {tab === 'chat' && chatStatus && <p role="status" style={{ color: '#86efac', fontSize: 13, padding: '0 16px' }}>{chatStatus}</p>}
       {tab === 'calendar' && <section aria-label="팀 달력" style={{ padding: '0 16px' }}><TeamCalendar embedded /></section>}
 
       {/* ── 채팅 ── */}
       {tab === 'chat' && (
         <>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 4, minHeight: 0 }}>
-            {messages.length === 0 && (
+            {chatReady && visibleMessages.length === 0 && (
               <div style={{ textAlign: 'center', padding: '60px 0', color: '#334155' }}>
                 <div style={{ fontSize: 40, marginBottom: 10 }}>💬</div>
                 <p style={{ margin: 0 }}>첫 메시지를 보내보세요</p>
               </div>
             )}
-            {messages.map((msg, i) => {
-              const isMe = msg.authorId === myId;
-              const showHeader = i === 0 || messages[i - 1].authorId !== msg.authorId;
+            {!chatReady && <p style={{ color: '#94a3b8', fontSize: 13 }}>채팅 불러오는 중…</p>}
+            {chatReady && visibleMessages.map((msg, i) => {
+              const isMe = String(msg.authorId) === myId;
+              const showHeader = i === 0 || visibleMessages[i - 1].authorId !== msg.authorId;
               return (
-                <div key={msg.id} style={{ display: 'flex', flexDirection: isMe ? 'row-reverse' : 'row', alignItems: 'flex-end', gap: 8, marginTop: showHeader && i > 0 ? 8 : 0 }}>
+                <div key={msg.id} data-message-id={msg.id} data-owner={isMe ? 'me' : 'other'} style={{ display: 'flex', width: '100%', justifyContent: isMe ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 8, marginTop: showHeader && i > 0 ? 8 : 0 }}>
                   {/* 아바타 (상대방, 첫 메시지) */}
                   {!isMe && (
                     <div style={{ width: 32, height: 32, borderRadius: 10, background: roleColor(msg.authorRole) + '33', border: `1.5px solid ${roleColor(msg.authorRole)}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0, visibility: showHeader ? 'visible' : 'hidden' }}>
                       {roleEmoji(msg.authorRole)}
                     </div>
                   )}
-                  <div style={{ maxWidth: '72%' }}>
+                  <div style={{ maxWidth: '82%', minWidth: 0 }}>
                     {!isMe && showHeader && (
                       <div style={{ fontSize: 11, color: '#64748b', marginBottom: 3, paddingLeft: 2, fontWeight: 600 }}>{msg.authorName}</div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 5, flexDirection: isMe ? 'row-reverse' : 'row' }}>
-                      <div style={{
+                      <button type="button" aria-label={`메시지 메뉴: ${msg.text}`} disabled={!chatReady || chatBusy} onClick={() => { setSelectedMessage(msg); setChatError(''); }} style={{ border: 0, textAlign: 'left', cursor: 'pointer', minWidth: 0, maxWidth: '100%', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere',
                         padding: '9px 13px', borderRadius: isMe ? '16px 4px 16px 16px' : '4px 16px 16px 16px',
                         background: isMe ? '#3b82f6' : '#1e293b',
                         color: isMe ? '#fff' : '#e2e8f0',
                         fontSize: 14, lineHeight: 1.5, wordBreak: 'break-word',
-                      }}>{msg.text}</div>
+                      }}>{msg.text}</button>
                       <span style={{ fontSize: 10, color: '#334155', flexShrink: 0 }}>{fmtTime(msg.createdAt)}</span>
-                      {(isMe || canEdit) && (
-                        <button onClick={() => deleteMessage(msg.id)} style={{ background: 'none', border: 'none', color: '#334155', fontSize: 12, cursor: 'pointer', padding: 2, flexShrink: 0 }}>×</button>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -273,14 +309,27 @@ export default function MessagesPage() {
             <input
               value={inputText}
               onChange={e => setInputText(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
-              placeholder="메시지 입력..."
-              style={{ flex: 1, padding: '11px 16px', borderRadius: 24, border: '1.5px solid #334155', background: '#1e293b', color: '#f8fafc', fontSize: 14, outline: 'none' }}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing && (e.preventDefault(), sendMessage())}
+              placeholder="메시지 입력..." maxLength={2000} disabled={chatBusy}
+              style={{ flex: 1, minWidth: 0, padding: '11px 16px', borderRadius: 24, border: '1.5px solid #334155', background: '#1e293b', color: '#f8fafc', fontSize: 14, outline: 'none' }}
             />
-            <button onClick={sendMessage} disabled={!inputText.trim()} style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: inputText.trim() ? '#3b82f6' : '#1e293b', color: inputText.trim() ? '#fff' : '#334155', fontSize: 18, cursor: inputText.trim() ? 'pointer' : 'default', flexShrink: 0 }}>↑</button>
+            <button aria-label="메시지 보내기" onClick={sendMessage} disabled={!inputText.trim() || chatBusy || !chatReady} style={{ width: 44, height: 44, borderRadius: '50%', border: 'none', background: inputText.trim() ? '#3b82f6' : '#1e293b', color: inputText.trim() ? '#fff' : '#334155', fontSize: 18, cursor: inputText.trim() ? 'pointer' : 'default', flexShrink: 0 }}>↑</button>
           </div>
         </>
       )}
+
+      <dialog ref={dialogRef} aria-labelledby="message-delete-title" onCancel={event => { if (chatBusy) event.preventDefault(); else setSelectedMessage(null); }} style={{ width: 'calc(100% - 40px)', maxWidth: 360, boxSizing: 'border-box', padding: 22, borderRadius: 20, border: '1px solid #475569', background: '#1e293b', color: '#f8fafc' }}>
+        <h2 id="message-delete-title" style={{ margin: '0 0 12px', fontSize: 18 }}>메시지 삭제</h2>
+        {selectedMessage && <>
+          <p style={{ color: '#94a3b8', fontSize: 13, overflowWrap: 'anywhere', maxHeight: 90, overflowY: 'auto' }}>{selectedMessage.text}</p>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <button autoFocus disabled={chatBusy} onClick={() => deleteMessage('me')} style={{ padding: 13, borderRadius: 10, border: '1px solid #475569', background: '#0f172a', color: '#e2e8f0', cursor: 'pointer' }}>나에게서만 삭제</button>
+            {String(selectedMessage.authorId) === myId && <button disabled={chatBusy} onClick={() => deleteMessage('everyone')} style={{ padding: 13, borderRadius: 10, border: 0, background: '#b91c1c', color: '#fff', cursor: 'pointer' }}>모두에게서 삭제</button>}
+            {chatError && <p role="alert" style={{ color: '#fca5a5', fontSize: 13 }}>{chatError}</p>}
+            <button disabled={chatBusy} onClick={() => setSelectedMessage(null)} style={{ padding: 10, border: 0, background: 'transparent', color: '#94a3b8', cursor: 'pointer' }}>취소</button>
+          </div>
+        </>}
+      </dialog>
 
       {/* ── 공지 ── */}
       {tab === 'notice' && (
