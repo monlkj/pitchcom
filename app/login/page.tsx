@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
-import { verifyTemporaryPassword, type TemporaryCredential } from '../../lib/temporaryAccounts';
+import { hashTemporaryPassword, verifyTemporaryPassword, type TemporaryCredential } from '../../lib/temporaryAccounts';
 import { normalizedEmail } from '../../lib/memberIdentity';
 import { useRouter } from 'next/navigation';
 import { refreshDeletedAccounts } from '../../lib/accountDeletion';
@@ -22,6 +22,8 @@ interface LocalUser {
   password?: string;
   authUserId?: string;
   temporaryCredential?: TemporaryCredential;
+  accountType?: 'temporary';
+  createdAt?: string;
   role: Role;
   coachType?: string;
   coachTypes?: string[];
@@ -57,6 +59,8 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const signingUp = useRef(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -159,21 +163,68 @@ export default function LoginPage() {
     finally { setLoading(false); }
   };
 
+  const temporaryInfoError = () => {
+    if (!name.trim()) return '이름을 입력해 주세요.';
+    if (!email.trim() || /\s/.test(email.trim()) || email.trim().length > 254) return '아이디는 공백 없이 1~254자로 입력해 주세요.';
+    if (password.length < 4 || password.length > 256) return '비밀번호는 4~256자로 입력해 주세요.';
+    if (password !== confirmation) return '비밀번호와 확인 비밀번호가 일치하지 않습니다.';
+    return '';
+  };
+  const signupUsers = async (): Promise<LocalUser[]> => {
+    await refreshDeletedAccounts();
+    const users = await syncRead(GLOBAL, 'users', true);
+    if (users !== null && !Array.isArray(users)) throw new Error('계정 목록을 확인할 수 없습니다.');
+    return users ?? [];
+  };
   const handleSignupInfo = async () => {
+    if (loading) return;
     setError('');
-    if (!name.trim()) { setError('이름을 입력해주세요'); return; }
-    if (!email.trim()) { setError('이메일을 입력해주세요'); return; }
-    if (!googleUser) { setError('Google 로그인 또는 감독이 발급한 임시 계정을 사용해 주세요.'); return; }
-    setStep('role');
+    if (!name.trim()) { setError('이름을 입력해 주세요.'); return; }
+    if (googleUser) { setStep('role'); return; }
+    const validation = temporaryInfoError();
+    if (validation) { setError(validation); return; }
+    setLoading(true);
+    try {
+      const users = await signupUsers();
+      if (users.some(u => normalizedEmail(u.email) === normalizedEmail(email))) throw new Error('이미 사용 중인 아이디 또는 이메일입니다.');
+      setStep('role');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '서버에서 계정 목록을 확인할 수 없습니다. 다시 시도해 주세요.'); }
+    finally { setLoading(false); }
   };
 
   const handleRoleSelect = (r: Role) => {
+    if (loading) return;
     if (r === 'coach') { setPendingRole(r); setStep('coachType'); return; }
     void createAccount(r);
   };
   const createAccount = async (r: Role, coachTypes: string[] = []) => {
-    if (!googleUser) { setError('Google 로그인을 먼저 진행해 주세요.'); return; }
-    await createGoogleAccount(r, coachTypes);
+    if (signingUp.current) return;
+    signingUp.current = true;
+    try {
+      if (googleUser) await createGoogleAccount(r, coachTypes);
+      else await createTemporaryAccount(r, coachTypes);
+    } finally { signingUp.current = false; }
+  };
+  const createTemporaryAccount = async (r: Role, coachTypes: string[]) => {
+    const validation = temporaryInfoError();
+    if (validation) { setError(validation); setStep('info'); return; }
+    if (r === 'coach' && !coachTypes.length) { setError('코치 유형을 하나 이상 선택해 주세요.'); return; }
+    setLoading(true); setError('');
+    try {
+      const credential = await hashTemporaryPassword(password);
+      // Check the live list again at creation, not only on the information step.
+      const users = await signupUsers();
+      if (users.some(u => normalizedEmail(u.email) === normalizedEmail(email))) throw new Error('이미 사용 중인 아이디 또는 이메일입니다.');
+      const user: LocalUser = { id: crypto.randomUUID(), name: name.trim(), email: normalizedEmail(email),
+        accountType: 'temporary', temporaryCredential: credential, role: r, teamCode: '',
+        joinApproved: r === 'manager', createdAt: new Date().toISOString(),
+        ...(r === 'manager' ? { managedTeamCodes: [] } : {}),
+        ...(r === 'coach' ? { coachTypes, coachType: coachTypes.join(' · ') } : {}) };
+      const next = [...users, user];
+      await syncWrite(GLOBAL, 'users', next, true);
+      saveUsers(next); setSession(user); setPassword(''); setConfirmation(''); router.replace('/home');
+    } catch (failure) { setError(failure instanceof Error ? failure.message : '회원가입을 저장하지 못했습니다. 연결을 확인해 주세요.'); }
+    finally { setLoading(false); }
   };
 
   const createGoogleAccount = async (r: Role, coachTypes: string[]) => {
@@ -228,13 +279,19 @@ export default function LoginPage() {
 
           <div style={{ background:'rgba(30,41,59,0.85)', backdropFilter:'blur(20px)', borderRadius:24, border:'1px solid rgba(255,255,255,0.07)', padding:'28px 24px', boxShadow:'0 24px 64px rgba(0,0,0,0.5)' }}>
 
-            {!googleUser && <button onClick={startGoogle} disabled={loading} style={{ ...btnPrimary, background: '#fff', color: '#1e293b', marginBottom: 18 }}>Google로 로그인</button>}
-            {!googleUser && <button type="button" aria-expanded={temporaryOpen} onClick={() => { setTemporaryOpen(!temporaryOpen); setError(''); }} disabled={loading} style={{ width: '100%', padding: 12, marginBottom: 12, border: '1px solid #475569', borderRadius: 12, background: 'transparent', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>임시 계정으로 로그인 {temporaryOpen ? '▴' : '▾'}</button>}
-            {!googleUser && !temporaryOpen && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
-            {!googleUser && temporaryOpen && <p style={{ color: '#94a3b8', fontSize: 13 }}>감독이 발급한 아이디와 비밀번호를 입력해 주세요. 기존 PitchCom 계정도 사용할 수 있어요.</p>}
+            {!googleUser && tab === 'login' && <button onClick={startGoogle} disabled={loading} style={{ ...btnPrimary, background: '#fff', color: '#1e293b', marginBottom: 18 }}>Google로 로그인</button>}
+            {!googleUser && tab === 'login' && <button type="button" aria-expanded={temporaryOpen} onClick={() => { setTemporaryOpen(!temporaryOpen); setError(''); }} disabled={loading} style={{ width: '100%', padding: 12, marginBottom: 12, border: '1px solid #475569', borderRadius: 12, background: 'transparent', color: '#cbd5e1', fontWeight: 700, cursor: 'pointer' }}>임시 계정으로 로그인 {temporaryOpen ? '▴' : '▾'}</button>}
+            {!googleUser && tab === 'login' && !temporaryOpen && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
+            {!googleUser && tab === 'login' && temporaryOpen && <p style={{ color: '#94a3b8', fontSize: 13 }}>가입하거나 발급받은 아이디와 비밀번호를 입력해 주세요. 기존 PitchCom 계정도 사용할 수 있어요.</p>}
             {googleUser && <p style={{ color: '#93c5fd', fontSize: 14 }}>{linkNeeded ? '기존 팀과 기록을 연결하려면 PitchCom 비밀번호를 한 번 입력해 주세요.' : '구글 인증 완료! 이름과 역할을 선택해 주세요.'}</p>}
-            {googleUser && tab === 'signup' && step !== 'info' && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
+            {tab === 'signup' && step !== 'info' && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
             {googleUser && <button disabled={loading} onClick={async () => { await supabase.auth.signOut({ scope: 'local' }); window.location.assign('/login'); }} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', marginBottom: 12 }}>다른 계정으로 로그인</button>}
+            {!googleUser && tab === 'login' && <button type="button" disabled={loading} onClick={() => { setTab('signup'); resetSignup(); setSelectedCoachTypes([]); setTemporaryOpen(false); setPassword(''); setConfirmation(''); }} style={{ ...btnPrimary, marginBottom: 12 }}>임시 계정으로 회원가입</button>}
+            {!googleUser && tab === 'signup' && <div style={{ marginBottom: 18 }}>
+              <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#f8fafc' }}>임시 계정 회원가입</h2>
+              <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.7 }}>구글 없이 감독·코치·선수 모두 가입할 수 있어요. 아이디는 pobi01처럼 입력해도 돼요.</p>
+              <button disabled={loading} onClick={() => { setTab('login'); setTemporaryOpen(true); resetSignup(); setPassword(''); setConfirmation(''); }} style={{ background: 'transparent', border: 'none', padding: 0, color: '#93c5fd', cursor: 'pointer' }}>← 로그인으로 돌아가기</button>
+            </div>}
             {/* 로그인 */}
             {tab === 'login' && (googleUser || temporaryOpen) && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
@@ -248,9 +305,12 @@ export default function LoginPage() {
             {/* 회원가입 - info */}
             {tab === 'signup' && step === 'info' && (
               <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-                <input type="text" value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={inputStyle} autoFocus />
-                <input type="email" readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder="이메일" style={inputStyle} />
-                {!googleUser && <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSignupInfo()} placeholder="비밀번호 (4자 이상)" style={inputStyle} />}
+                <input type="text" aria-label="가입 이름" maxLength={60} disabled={loading} value={name} onChange={e=>setName(e.target.value)} placeholder="이름" style={inputStyle} autoFocus />
+                <input type={googleUser ? "email" : "text"} aria-label="가입 아이디" autoComplete="username" autoCapitalize="none" maxLength={254} disabled={loading} readOnly={!!googleUser} value={email} onChange={e=>setEmail(e.target.value)} placeholder={googleUser ? "이메일" : "아이디 또는 이메일 (예: pobi01)"} style={inputStyle} />
+                {!googleUser && <>
+                  <input type="password" aria-label="가입 비밀번호" autoComplete="new-password" maxLength={256} disabled={loading} value={password} onChange={e=>setPassword(e.target.value)} placeholder="비밀번호 (4자 이상)" style={inputStyle} />
+                  <input type="password" aria-label="가입 확인 비밀번호" autoComplete="new-password" maxLength={256} disabled={loading} value={confirmation} onChange={e=>setConfirmation(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleSignupInfo()} placeholder="확인 비밀번호" style={inputStyle} />
+                </>}
                 {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
                 <button onClick={handleSignupInfo} disabled={loading} style={btnPrimary}>다음 →</button>
               </div>
@@ -275,7 +335,7 @@ export default function LoginPage() {
                     </button>
                   ))}
                 </div>
-                <button onClick={resetSignup} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
+                <button disabled={loading} onClick={resetSignup} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
               </div>
             )}
 
@@ -296,7 +356,7 @@ export default function LoginPage() {
                   ))}
                 </div>
                 <button disabled={loading || selectedCoachTypes.length === 0} onClick={() => createAccount('coach', selectedCoachTypes)} style={{ ...btnPrimary, marginTop: 16, opacity: selectedCoachTypes.length === 0 ? .5 : 1 }}>선택 완료 · 가입하기</button>
-                <button onClick={() => { setStep('role'); setPendingRole(null); }} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
+                <button disabled={loading} onClick={() => { setStep('role'); setPendingRole(null); }} style={{ marginTop:12, width:'100%', padding:'10px', borderRadius:10, border:'1px solid #334155', background:'transparent', color:'#64748b', fontSize:13, cursor:'pointer' }}>← 뒤로</button>
               </div>
             )}
           </div>

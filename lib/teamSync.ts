@@ -13,7 +13,7 @@ export async function syncRead(teamCode: string, key: string, strict = false): P
   if (key !== 'join-requests' && !canUseTeam(teamCode)) return null;
   try {
     const query = supabase.from('team_shared_data').select('data').eq('team_code', teamCode).eq('data_key', key);
-    const { data, error } = (key === 'leadership' || key === 'tactics' || key.startsWith('condition:')) ? await query.maybeSingle() : await query.single();
+    const { data, error } = ((teamCode === '__global__' && key === 'users') || key === 'leadership' || key === 'tactics' || key.startsWith('condition:')) ? await query.maybeSingle() : await query.single();
     if (error) { if (strict) throw error; return null; }
     if (!data || (key !== 'join-requests' && !canUseTeam(teamCode))) return null;
     if (teamCode === '__global__' && key === 'users') {

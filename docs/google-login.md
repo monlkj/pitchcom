@@ -1,6 +1,6 @@
 # Google login
 
-This adds Google OAuth through Supabase Auth alongside a separate temporary-account login below the Google button. New self-registration uses Google; existing legacy accounts still sign in through the temporary/legacy login panel. It is not a complete authorization or email/password Auth migration.
+This adds Google OAuth through Supabase Auth alongside a separate temporary-account login below the Google button. New self-registration supports Google and temporary accounts; existing legacy accounts still sign in through the temporary/legacy login panel. It is not a complete authorization or email/password Auth migration.
 
 ## Provider setup
 
@@ -24,6 +24,14 @@ The existing shared JSON users table, its anonymous-access policies, and the tem
 ## Verification
 
 Run `npx tsc --noEmit`. Browser checks should use a local mock Supabase service and fake identities only: OAuth redirect construction, cancellation/error, first-time profile creation, legacy-password linking, original ID/team preservation, no password saved for Google profiles, subsequent login, invalid Auth session rejection and logout. Real provider consent and the configured production deployment require a user-operated test with a Google test account; local mocks cannot prove Google project settings are correct.
+
+## Self-service temporary signup
+
+The login screen offers `임시 계정으로 회원가입` without requiring Google or an existing director. Enter a name, a unique ID/email, a password of 4–256 characters, and matching confirmation, then select director, coach or player. Coaches select one or more specialties. IDs use the same case-insensitive namespace as director-issued accounts and existing emails.
+
+Successful signup creates a salted PBKDF2 temporary credential and an application session only after the cloud write succeeds. Password and confirmation are never persisted as plaintext. A director starts with no team code and an empty ownership history, then creates or enters their own team code. Coaches and players start unaffiliated and unapproved, and must request team membership normally. Existing team ownership checks still prevent a new director from claiming another director's team code. Director-issued accounts remain available separately and still only allow coach/player roles.
+
+The global users read permits a missing row via `maybeSingle()` so the very first temporary director can register on an empty project. Genuine database/network errors are not treated as an empty account list. Availability and duplicate IDs are checked at the information step and checked again against fresh cloud data on creation. The shared JSON storage still has last-write-wins concurrency limitations and does not replace the authenticated-table migration described above.
 
 ## Director-issued temporary accounts
 
