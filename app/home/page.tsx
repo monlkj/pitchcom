@@ -109,17 +109,6 @@ export default function Home() {
     router.push('/login');
   };
 
-  const deleteAccount = () => {
-    if (!confirm('계정을 삭제하면 복구할 수 없어요. 정말 삭제할까요?')) return;
-    const raw = localStorage.getItem('pitchcom-session');
-    if (!raw) return;
-    const session = JSON.parse(raw);
-    const users = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    localStorage.setItem('pitchcom-users', JSON.stringify(users.filter((u: any) => u.id !== session.id)));
-    localStorage.removeItem('pitchcom-session');
-    router.push('/login');
-  };
-
   const saveCode = async (targetCode?: string, leave = false) => {
     const code = (typeof targetCode === 'string' ? targetCode : newCode).trim().toUpperCase();
     if (!code && !leave) { setCodeError('팀 코드를 입력해주세요'); return; }
@@ -192,6 +181,7 @@ export default function Home() {
               </div>
             </div>
             <button onClick={() => router.push('/account-transfer')} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#93c5fd', fontSize: 12, cursor: 'pointer' }}>계정 전환</button>
+            <button onClick={() => router.push('/account-delete')} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #ef444433', background: 'transparent', color: '#fca5a5', fontSize: 12, cursor: 'pointer' }}>계정 삭제</button>
           <button onClick={logout} style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#64748b', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
               로그아웃
             </button>
@@ -392,14 +382,7 @@ export default function Home() {
               </button>
             )}
 
-            {/* 계정 삭제 (감독/코치 전용) */}
-            {(userRole === 'manager' || userRole === 'coach') && (
-              <div style={{ marginTop: 24, textAlign: 'center' }}>
-                <button onClick={deleteAccount} style={{ padding: '8px 18px', borderRadius: 10, border: '1px solid #ef444433', background: 'transparent', color: '#ef4444', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                  계정 삭제
-                </button>
-              </div>
-            )}
+
           </div>
         )}
       </div>

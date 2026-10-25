@@ -64,7 +64,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
           window.location.assign('/home'); return;
         }
         migrateTeamCache();
-        if (path !== '/home' && path !== '/account-transfer' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
+        if (path !== '/home' && path !== '/account-transfer' && path !== '/account-delete' && (!session.teamCode || (session.role !== 'manager' && session.joinApproved !== true))) {
           router.replace('/home'); return;
         }
         setConnectionError(false); setAllowedPath(path);
@@ -73,7 +73,7 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
     };
     void check();
     // The transfer API re-verifies both identities; its success screen must survive intentional logout.
-    if (path === '/account-transfer') return () => { active = false; };
+    if (path === '/account-transfer' || path === '/account-delete') return () => { active = false; };
     const timer = window.setInterval(check, 15000);
     window.addEventListener('focus', check);
     window.addEventListener('online', check);
