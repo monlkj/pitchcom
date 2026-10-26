@@ -73,24 +73,25 @@ export default function AdminPage() {
   const [ready, setReady] = useState(false);
 
   const loadMembers = async (code: string) => {
-    const local: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const cloud: Member[] = (await syncRead('__global__', 'users')) ?? [];
-    const merged: Member[] = [...cloud];
-    for (const user of local) {
-      if (!merged.find(u => u.id === user.id || (normalizedEmail(user.email) && normalizedEmail(u.email) === normalizedEmail(user.email)))) merged.push(user);
-    }
-    localStorage.setItem('pitchcom-users', JSON.stringify(merged));
-    const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
-    setMembers(uniqueMembers(withoutDeletedAccounts(merged).filter(u => u.teamCode === code && u.joinApproved !== false), session.id));
-    const reqs: JoinRequest[] = (await syncRead(code, 'join-requests')) ?? [];
-    setJoinRequests(reqs.filter(r => r.status === 'pending' && merged.some(u => u.id === r.userId && u.teamCode === code && u.joinApproved === false && u.joinRequestId === r.id)));
+    try {
+      // The server already excludes parked/transferred profiles. Never append
+      // stale browser records, which can bring retired accounts back on screen.
+      const cloud = await syncRead('__global__', 'users', true);
+      if (!Array.isArray(cloud)) throw new Error('invalid members');
+      const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+      if (session.role !== 'manager' || session.teamCode !== code) return;
+      const current: Member[] = withoutDeletedAccounts(cloud);
+      setDeleteError(previous => previous === '팀원 목록을 불러오지 못했습니다. 연결 상태를 확인하고 새로고침해 주세요.' ? '' : previous);
+      localStorage.setItem('pitchcom-users', JSON.stringify(current));
+      const nextMembers = uniqueMembers(current.filter(u => u.teamCode === code && u.joinApproved !== false), session.id);
+      setMembers(previous => JSON.stringify(previous) === JSON.stringify(nextMembers) ? previous : nextMembers);
+      const reqs: JoinRequest[] = (await syncRead(code, 'join-requests', true)) ?? [];
+      setJoinRequests(reqs.filter(r => r.status === 'pending' && current.some(u => u.id === r.userId && u.teamCode === code && u.joinApproved === false && u.joinRequestId === r.id)));
+    } catch { setMembers([]); setJoinRequests([]); setDeleteError('팀원 목록을 불러오지 못했습니다. 연결 상태를 확인하고 새로고침해 주세요.'); }
   };
 
   const approveRequest = async (req: JoinRequest) => {
-    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
-    const allUsers = [...cloudUsers];
-    for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const allUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const requester = allUsers.find(u => u.id === req.userId);
     const freshRequests: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
     if (!requester || requester.teamCode !== teamCode || requester.joinRequestId !== req.id || !freshRequests.some(r => r.id === req.id && r.status === 'pending')) {
@@ -106,10 +107,7 @@ export default function AdminPage() {
   };
 
   const rejectRequest = async (req: JoinRequest) => {
-    const users: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
-    const cloudUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
-    const allUsers = [...cloudUsers];
-    for (const u of users) { if (!allUsers.find(cu => cu.email === u.email)) allUsers.push(u); }
+    const allUsers: Member[] = (await syncRead('__global__', 'users')) ?? [];
     const requester = allUsers.find(u => u.id === req.userId);
     const freshRequests: JoinRequest[] = (await syncRead(teamCode, 'join-requests')) ?? [];
     if (!requester || requester.teamCode !== teamCode || requester.joinRequestId !== req.id || !freshRequests.some(r => r.id === req.id && r.status === 'pending')) {
@@ -135,6 +133,17 @@ export default function AdminPage() {
     loadMembers(session.teamCode ?? '');
     setReady(true);
   }, [router]);
+
+  useEffect(() => {
+    if (!ready || !teamCode) return;
+    const refresh = () => {
+      if (!kickingId && !deletingId && !coachSaving && !editingCoach) void loadMembers(teamCode);
+    };
+    const timer = window.setInterval(refresh, 15000);
+    window.addEventListener('focus', refresh);
+    window.addEventListener('online', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); };
+  }, [ready, teamCode, kickingId, deletingId, coachSaving, editingCoach]);
 
   const saveCoachTypes = async () => {
     if (coachSaving || coachSelection.length === 0) return;
@@ -261,7 +270,7 @@ export default function AdminPage() {
               </div>
               <div style={{ fontSize: 12, color: '#60a5fa', overflowWrap: 'anywhere' }}>{me.email}</div>
             </div>
-            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700, maxWidth: 150, overflowWrap: 'anywhere' }}>감독{me.playsAsPlayer ? ' · 선수 겸임' : ''}{getCoachTypes(me).length ? ` · ${coachLabel(me)}` : ''}</span>
+            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700, maxWidth: 150, overflowWrap: 'anywhere' }}>감독{me.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === me.id ? ' · ⭐ 주장' : leadership.viceCaptainId === me.id ? ' · 🌟 부주장' : ''}{getCoachTypes(me).length ? ` · ${coachLabel(me)}` : ''}</span>
           </div>
         </div>
       )}
@@ -291,7 +300,7 @@ export default function AdminPage() {
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (m.role === 'player' && leadership.captainId === m.id ? '⭐ 주장' : m.role === 'player' && leadership.viceCaptainId === m.id ? '🌟 부주장' : ROLE_LABEL[m.role] ?? m.role)}{m.role !== 'player' && m.playsAsPlayer ? ' · 선수 겸임' : ''}{m.role === 'manager' && getCoachTypes(m).length ? ` · ${coachLabel(m)}` : ''}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}{m.role !== 'player' && m.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === m.id ? ' · ⭐ 주장' : leadership.viceCaptainId === m.id ? ' · 🌟 부주장' : ''}{m.role === 'manager' && getCoachTypes(m).length ? ` · ${coachLabel(m)}` : ''}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
                   <button disabled={Boolean(kickingId || deletingId)} onClick={() => kickMember(m)} style={{

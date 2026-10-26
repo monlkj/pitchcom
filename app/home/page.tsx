@@ -96,7 +96,7 @@ export default function Home() {
   useEffect(() => {
     let active = true;
     setPlayerTitle('선수');
-    if (userRole !== 'player' || !teamCode || joinApproved !== true) return;
+    if ((userRole !== 'player' && !playsAsPlayer) || !teamCode || (userRole !== 'manager' && joinApproved !== true)) return;
     const refresh = async () => {
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       const saved = await syncRead(teamCode, 'leadership');
@@ -108,7 +108,7 @@ export default function Home() {
     const timer = window.setInterval(refresh, 15000);
     window.addEventListener('focus', refresh);
     return () => { active = false; window.clearInterval(timer); window.removeEventListener('focus', refresh); };
-  }, [userRole, teamCode, joinApproved]);
+  }, [userRole, playsAsPlayer, teamCode, joinApproved]);
 
   const logout = async () => {
     localStorage.removeItem('pitchcom-session');
@@ -185,7 +185,7 @@ export default function Home() {
             <div style={{ textAlign: 'right', maxWidth: 180, overflowWrap: 'anywhere' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{userName}</div>
               <div style={{ fontSize: 11, color: '#475569' }}>
-                {roleLabel}{playsAsPlayer && userRole !== 'player' ? ' · 선수 겸임' : ''}{teamCode ? ` · ${teamCode}` : ''}
+                {roleLabel}{playsAsPlayer && userRole !== 'player' ? ' · 선수 겸임' : ''}{userRole !== 'player' && playerTitle !== '선수' ? ` · ${playerTitle}` : ''}{teamCode ? ` · ${teamCode}` : ''}
               </div>
             </div>
             <button onClick={() => router.push('/account-transfer')} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#93c5fd', fontSize: 12, cursor: 'pointer' }}>계정 전환</button>

@@ -49,12 +49,12 @@ export default function TeamLeadership({ teamCode, members, onChange }: { teamCo
   };
   return <section style={{ padding: 18, border: '1px solid #334155', borderRadius: 16, background: '#1e293b', marginBottom: 20 }}>
     <h2 style={{ margin: '0 0 10px', fontSize: 16, color: '#f8fafc' }}>주장 · 부주장</h2>
-    <p style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.7, marginBottom: 14 }}>승인된 선수 중 각각 1명까지 임명합니다. 가입 승인·계정 관리 권한은 감독에게 유지됩니다.</p>
+    <p style={{ color: '#94a3b8', fontSize: 12, lineHeight: 1.7, marginBottom: 14 }}>승인된 선수와 선수 겸임 감독·코치 중 각각 1명까지 임명합니다. 가입 승인·계정 관리 권한은 감독에게 유지됩니다.</p>
     {([{ key: 'captain' as const, label: '주장', selected: captain, set: setCaptain, current: value.captainId }, { key: 'viceCaptain' as const, label: '부주장', selected: vice, set: setVice, current: value.viceCaptainId }]).map(item => <div key={item.key} style={{ marginTop: 14 }}>
       <p style={{ color: '#cbd5e1', fontSize: 13, marginBottom: 8 }}>{item.label}: {eligible.find(m => m.id === item.current)?.name || '미지정'}</p>
       <div style={{ display: 'flex', gap: 8 }}>
         <select aria-label={`${item.label} 선수 선택`} disabled={busy || !loaded} value={item.selected} onChange={e => item.set(e.target.value)} style={{ flex: 1, minWidth: 0, padding: 10, borderRadius: 9, background: '#0f172a', color: '#f8fafc', border: '1px solid #475569' }}>
-          <option value="">미지정 (해제)</option>{eligible.filter(m => item.key !== 'viceCaptain' || m.id !== value.captainId).map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+          <option value="">미지정 (해제)</option>{eligible.filter(m => item.key !== 'viceCaptain' || m.id !== value.captainId).map(m => <option key={m.id} value={m.id}>{m.name}{m.role === 'manager' ? ' (감독·선수)' : m.role === 'coach' ? ' (코치·선수)' : ''}</option>)}
         </select>
         <button disabled={busy || !loaded} onClick={() => appoint(item.key, item.selected)} style={{ padding: '10px 14px', borderRadius: 9, border: 0, color: '#fff', background: '#2563eb', cursor: 'pointer', whiteSpace: 'nowrap' }}>{item.label} {item.selected ? '임명' : '해제'}</button>
       </div>
