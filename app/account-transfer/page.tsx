@@ -58,7 +58,7 @@ export default function AccountTransferPage() {
         if (authError || !data.session) throw new Error('지금까지 사용한 구글 계정으로 다시 로그인해 주세요.');
         sourceGoogleToken = data.session.access_token;
       }
-      const response = await fetch('/api/account-transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, sourceIdentifier, sourcePassword, sourceGoogleToken, targetType, targetIdentifier, targetPassword, targetConfirmation: confirmation, targetGoogleToken: googleToken, revision: preview?.revision }) });
+      const response = await fetch('/api/account-transfer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, sourceIdentifier, sourceProfileId: sourceIdentifier.trim().toLowerCase() === source.email.trim().toLowerCase() ? source.id : undefined, sourcePassword, sourceGoogleToken, targetType, targetIdentifier, targetPassword, targetConfirmation: confirmation, targetGoogleToken: googleToken, revision: preview?.revision }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || '계정 전환을 진행하지 못했습니다.');
       if (action === 'preview') setPreview(result.preview);
@@ -72,7 +72,7 @@ export default function AccountTransferPage() {
   };
   return <FeaturePage title="🔄 계정 전환" subtitle="팀과 내 기록을 유지하고 로그인 계정만 바꿔요">
     {done ? <section style={ui.card}><h2 style={{ color: '#86efac', fontSize: 18 }}>계정 전환이 완료됐어요.</h2><p style={{ color: '#cbd5e1', lineHeight: 1.8 }}>기존 팀·역할·승인·기록은 그대로예요. 앞으로 사용할 계정으로 다시 로그인해 주세요.</p><Link href="/login" style={{ ...ui.primary, display: 'inline-block', textDecoration: 'none' }}>새 계정으로 로그인</Link></section> : <>
-      <section style={ui.card}><p style={{ color: '#cbd5e1', margin: 0, fontSize: 13, lineHeight: 1.8 }}>지금까지 사용한 계정과 앞으로 사용할 계정 모두 본인 확인이 필요해요. 전환 뒤에는 이전 로그인 정보로 기존 기록에 들어갈 수 없어요.</p></section>
+      <section style={ui.card}><p style={{ color: '#cbd5e1', margin: 0, fontSize: 13, lineHeight: 1.8 }}>현재 로그인한 계정의 팀과 기록을 유지해요. 같은 아이디의 계정이 여러 개여도 현재 계정을 기준으로 구분하며, 두 계정 모두 본인 확인이 필요해요. 전환 뒤에는 이전 로그인 정보로 기존 기록에 들어갈 수 없어요.</p></section>
       {error && <p role="alert" style={{ color: '#fca5a5', fontSize: 14 }}>{error}</p>}
       {preview ? <section style={ui.card}>
         <h2 style={{ marginTop: 0, fontSize: 18 }}>전환할 내용을 확인해 주세요</h2>

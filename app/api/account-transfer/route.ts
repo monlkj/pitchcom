@@ -48,9 +48,13 @@ export async function POST(request: Request) {
     if (snapshot.error || !Array.isArray(snapshot.data?.data) || !snapshot.data.updated_at) return reply('계정 정보를 확인하지 못했습니다.', 503);
     const stored: IdentityProfile[] = snapshot.data.data;
     const profiles = activeProfiles(stored);
-    const sources = profiles.filter(profile => normalized(profile.email) === normalized(input.sourceIdentifier));
-    if (sources.length !== 1) throw new Error(sources.length > 1 ? '같은 아이디의 계정이 여러 개라 자동 전환할 수 없습니다. 계정을 정리한 뒤 진행해 주세요.' : '지금까지 사용한 계정의 본인 확인 정보를 확인해 주세요.');
+    // The profile ID disambiguates legacy duplicate login identifiers. It is only
+    // a selector: password or verified Google identity is still required below.
+    if (input.sourceProfileId !== undefined && (typeof input.sourceProfileId !== 'string' || !input.sourceProfileId.trim() || input.sourceProfileId.length > 256)) throw new Error('기존 계정으로 다시 로그인한 뒤 진행해 주세요.');
+    const sources = profiles.filter(profile => normalized(profile.email) === normalized(input.sourceIdentifier) && (input.sourceProfileId === undefined || profile.id === input.sourceProfileId));
+    if (sources.length !== 1) throw new Error(sources.length > 1 ? '같은 아이디의 계정이 여러 개입니다. 기록을 유지할 계정으로 로그인한 뒤 계정 전환을 열어 주세요.' : '지금까지 사용한 계정의 본인 확인 정보를 확인해 주세요.');
     const source = sources[0];
+    if (stored.filter(profile => profile.id === source.id).length !== 1) throw new Error('계정 고유번호가 중복되어 있습니다. 기록 보호를 위해 전환을 중단했습니다.');
     if (source.authUserId) { if ((await google(input.sourceGoogleToken)).id !== source.authUserId) throw new Error('지금까지 사용한 구글 계정으로 로그인해 주세요.'); }
     else if (!await passwordMatches(source, input.sourcePassword)) throw new Error('지금까지 사용한 계정의 비밀번호가 맞지 않습니다.');
     let identifier: string; let authUserId: string | undefined; let target: IdentityProfile | undefined;
