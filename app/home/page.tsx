@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
-import { withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { managedTeams, sameAccount, ownsTeam } from '../../lib/managerTeams';
 import { resolveLeadership } from '../../lib/teamLeadership';
 import { coachLabel } from '../../lib/coachTypes';
@@ -125,12 +124,12 @@ export default function Home() {
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       if (!session.id) return;
       if (session.teamCode === code && !(leave && session.transferReturnId)) { setEditingCode(false); return; }
-      const localUsers: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
       const cloud = await syncRead('__global__', 'users', true);
-      const users: any[] = Array.isArray(cloud) ? [...cloud] : [...localUsers];
-      for (const user of withoutDeletedAccounts(localUsers)) if (!users.some(u => u.id === user.id)) users.push(user);
-      const me = users.find(u => u.id === session.id) ?? users.find(u => sameAccount(u, session)) ?? session;
-      const isManager = session.role === 'manager';
+      if (!Array.isArray(cloud)) throw new Error('계정 목록을 확인할 수 없습니다.');
+      const users: any[] = [...cloud];
+      const me = users.find(u => u.id === session.id);
+      if (!me || me.role !== session.role || me.teamCode !== session.teamCode) throw new Error('계정 상태가 변경되었습니다.');
+      const isManager = me.role === 'manager';
       const managed = managedTeams(users, session);
       const owner = users.find(u => !sameAccount(u, session) && ownsTeam(u, code));
       if (!isManager && code && !users.some(u => ownsTeam(u, code))) {
@@ -202,7 +201,7 @@ export default function Home() {
 
         {removalNotice && <section role="alert" style={{ maxWidth: 480, margin: '20px auto', padding: '16px 20px', border: '1px solid #f59e0b66', borderRadius: 14, background: '#332812', color: '#fde68a' }}>
           <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{removalNotice.teamCode}팀에서 내보내졌습니다.</p>
-          <p style={{ margin: '8px 0', fontSize: 12, lineHeight: 1.7 }}>계정은 유지됩니다. 다시 팀에 가입하려면 팀 코드를 입력하고 감독의 승인을 받아 주세요.</p>
+          <p style={{ margin: '8px 0', fontSize: 12, lineHeight: 1.7 }}>{userRole === 'manager' ? '계정은 유지됩니다. 본인이 관리하던 팀 코드를 입력하면 감독 승인 없이 다시 들어갈 수 있어요.' : '계정은 유지됩니다. 다시 팀에 가입하려면 팀 코드를 입력하고 감독의 승인을 받아 주세요.'}</p>
           <button onClick={() => { const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}'); localStorage.setItem(`pitchcomDismissedRemoval:${session.id}`, removalNotice.id); setRemovalNotice(null); }} style={{ padding: '8px 14px', border: '1px solid #f59e0b66', borderRadius: 8, background: 'transparent', color: '#fde68a', cursor: 'pointer' }}>확인</button>
         </section>}
 

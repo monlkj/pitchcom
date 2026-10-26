@@ -68,9 +68,9 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
         if (!remote || remote.email !== session.email || (remote.identityVersion ?? 0) !== (session.identityVersion ?? 0) || remote.authUserId !== session.authUserId) {
           localStorage.removeItem('pitchcom-session'); setAllowedPath(''); router.replace('/login'); return;
         }
-        if (remote && (session.playsAsPlayer !== remote.playsAsPlayer || session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.joinRequestId !== remote.joinRequestId || session.removalNotice?.id !== remote.removalNotice?.id)) {
+        if (remote && (session.role !== remote.role || session.playsAsPlayer !== remote.playsAsPlayer || session.teamCode !== remote.teamCode || session.joinApproved !== remote.joinApproved || session.joinRequestId !== remote.joinRequestId || session.removalNotice?.id !== remote.removalNotice?.id)) {
           migrateTeamCache();
-          localStorage.setItem('pitchcom-session', JSON.stringify({ ...session, playsAsPlayer: remote.playsAsPlayer, teamCode: remote.teamCode, joinApproved: remote.joinApproved, joinRequestId: remote.joinRequestId, removalNotice: remote.removalNotice }));
+          localStorage.setItem('pitchcom-session', JSON.stringify(profileSession(remote)));
           window.location.assign('/home'); return;
         }
         migrateTeamCache();
