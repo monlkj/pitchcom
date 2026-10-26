@@ -1,5 +1,6 @@
 'use client';
 
+import ParticipationSettings from '../components/ParticipationSettings';
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -26,6 +27,7 @@ export default function Home() {
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
   const [playerTitle, setPlayerTitle] = useState('선수');
+  const [playsAsPlayer, setPlaysAsPlayer] = useState(false);
   const [userRole, setUserRole] = useState('');
   const [teamCode, setTeamCode] = useState('');
   const [coachType, setCoachType] = useState('');
@@ -70,6 +72,7 @@ export default function Home() {
     setPendingCount(0);
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
+    setPlaysAsPlayer(session.playsAsPlayer === true);
     setCoachType(coachLabel(session));
     setTeamCode(session.teamCode ?? '');
     setJoinApproved(session.joinApproved ?? null);
@@ -151,7 +154,7 @@ export default function Home() {
 
   if (!ready) return null;
 
-  const roleLabel = userRole === 'manager' ? '🧢 감독' : userRole === 'coach' ? `📋 ${coachType || '코치'}` : `⚾ ${playerTitle}`;
+  const roleLabel = userRole === 'manager' ? `🧢 감독${coachType && coachType !== '코치' ? ` · ${coachType}` : ''}` : userRole === 'coach' ? `📋 ${coachType || '코치'}` : `⚾ ${playerTitle}`;
   // 코치/선수이고 팀코드 없으면 팀코드 입력만 표시
   const needTeamCode = !teamCode && (userRole === 'coach' || userRole === 'player');
   // 대기 중 화면
@@ -177,7 +180,7 @@ export default function Home() {
             <div style={{ textAlign: 'right', maxWidth: 180, overflowWrap: 'anywhere' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>{userName}</div>
               <div style={{ fontSize: 11, color: '#475569' }}>
-                {roleLabel}{teamCode ? ` · ${teamCode}` : ''}
+                {roleLabel}{playsAsPlayer && userRole !== 'player' ? ' · 선수 겸임' : ''}{teamCode ? ` · ${teamCode}` : ''}
               </div>
             </div>
             <button onClick={() => router.push('/account-transfer')} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #334155', background: 'transparent', color: '#93c5fd', fontSize: 12, cursor: 'pointer' }}>계정 전환</button>
@@ -187,6 +190,8 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        <ParticipationSettings />
 
         {removalNotice && <section role="alert" style={{ maxWidth: 480, margin: '20px auto', padding: '16px 20px', border: '1px solid #f59e0b66', borderRadius: 14, background: '#332812', color: '#fde68a' }}>
           <p style={{ margin: 0, fontSize: 15, fontWeight: 700 }}>{removalNotice.teamCode}팀에서 내보내졌습니다.</p>

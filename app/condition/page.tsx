@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import FeaturePage, { featureStyles as ui } from '../components/FeaturePage';
 import { featureSession, koreaDate, sameFeatureSession, saveFeature, type FeatureSession } from '../../lib/teamFeatures';
+import { participatesAsPlayer } from '../../lib/playerParticipation';
 import { syncRead } from '../../lib/teamSync';
 
 type Entry = { userId: string; name: string; date: string; condition: number; fatigue: number; sleep: number; note: string; updatedAt: string };
@@ -22,7 +23,9 @@ export default function ConditionPage() {
   const [error, setError] = useState(''); const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(false); const [refresh, setRefresh] = useState(0);
   const saving = useRef(false);
-  const staff = session?.role === 'manager' || session?.role === 'coach';
+  const [ownView, setOwnView] = useState(false);
+  const staffRole = session?.role === 'manager' || session?.role === 'coach';
+  const staff = !ownView && staffRole;
   useEffect(() => { try { setSession(featureSession()); } catch { setError('팀 가입 승인을 받은 뒤 이용할 수 있어요.'); setLoading(false); } }, []);
   useEffect(() => {
     if (!session) return;
@@ -33,7 +36,7 @@ export default function ConditionPage() {
         if (staff) {
           const users = await syncRead('__global__', 'users', true);
           if (!Array.isArray(users)) throw new Error('invalid members');
-          const players = users.filter(u => u.role === 'player' && u.teamCode === session.teamCode && (u.joinApproved === true || (u.joinApproved == null && !u.joinRequestId)));
+          const players = users.filter(u => participatesAsPlayer(u) && u.teamCode === session.teamCode && (u.joinApproved === true || (u.joinApproved == null && !u.joinRequestId)));
           const entries: Row[] = await Promise.all(players.map(async player => {
             const data = await syncRead(session.teamCode, key(date, player.id), true);
             return { id: player.id, name: player.name, entry: validEntry(data, date, player.id) ? data : null };
@@ -52,7 +55,7 @@ export default function ConditionPage() {
   }, [session, date, refresh, staff]);
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!session || session.role !== 'player' || loading || saving.current || error) return;
+    if (!session || !participatesAsPlayer(session) || loading || saving.current || error) return;
     saving.current = true; setBusy(true); setError(''); setMessage('');
     try {
       const entry: Entry = { userId: session.id, name: session.name, date, condition, fatigue, sleep, note: note.trim(), updatedAt: new Date().toISOString() };
@@ -64,6 +67,7 @@ export default function ConditionPage() {
   };
   const completed = rows.filter(row => row.entry);
   return <FeaturePage title="💪 컨디션" subtitle={staff ? '날짜별 선수 상태와 제출 현황을 확인해요' : '팀과 공유할 오늘의 상태를 남겨 주세요'}>
+    {staffRole && participatesAsPlayer(session) && <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}><button aria-pressed={!ownView} disabled={busy} onClick={() => setOwnView(false)} style={ui.button}>팀 제출 현황</button><button aria-pressed={ownView} disabled={busy} onClick={() => setOwnView(true)} style={ui.button}>내 컨디션</button></div>}
     <section style={{ ...ui.card, display: 'flex', alignItems: 'end', flexWrap: 'wrap', gap: 12 }}>
       <label style={{ flex: 1, minWidth: 140, fontSize: 13 }}>기록 날짜 (한국 시간)<input aria-label="컨디션 날짜" type="date" max={koreaDate()} value={date} disabled={busy} onChange={e => { if (e.target.value) setDate(e.target.value); }} style={{ ...ui.input, minWidth: 0, marginTop: 6 }} /></label>
       <button disabled={busy || loading} onClick={() => setRefresh(n => n + 1)} style={ui.button}>새로고침</button>
@@ -79,7 +83,7 @@ export default function ConditionPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><strong style={{ overflowWrap: 'anywhere' }}>{row.name}</strong><span style={{ color: row.entry ? colors[row.entry.condition - 1] : '#94a3b8', fontSize: 13, whiteSpace: 'nowrap' }}>{row.entry ? levels[row.entry.condition - 1] : '미제출'}</span></div>
         {row.entry && <><p style={{ fontSize: 13, color: '#cbd5e1' }}>컨디션 {row.entry.condition}/5 · 피로도 {row.entry.fatigue}/5 · 수면 {row.entry.sleep}시간</p>{row.entry.note && <p style={{ color: '#94a3b8', fontSize: 13, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', marginBottom: 0 }}>{row.entry.note}</p>}</>}
       </article>)}
-    </> : session?.role === 'player' && <form onSubmit={save} style={ui.card}>
+    </> : participatesAsPlayer(session) && <form onSubmit={save} style={ui.card}>
       <h2 style={{ marginTop: 0, fontSize: 17 }}>{existing ? '내 컨디션 수정' : '내 컨디션 입력'}</h2>
       <fieldset disabled={busy || !!error} style={{ margin: 0, padding: 0, border: 0 }}><legend style={{ fontSize: 14, marginBottom: 10 }}>오늘의 컨디션</legend><div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>{levels.map((label, i) => <button key={label} type="button" aria-pressed={condition === i + 1} onClick={() => setCondition(i + 1)} style={{ ...ui.button, flex: '1 0 70px', borderColor: condition === i + 1 ? colors[i] : '#475569', color: condition === i + 1 ? colors[i] : '#94a3b8', fontSize: 12, padding: '12px 6px' }}>{i+1} · {label}</button>)}</div></fieldset>
       <label style={{ display: 'block', marginTop: 22, fontSize: 14 }}>피로도 {fatigue}/5 <span style={{ color: '#94a3b8', fontSize: 12 }}>(1 낮음 · 5 매우 높음)</span><input aria-label="피로도" type="range" min="1" max="5" step="1" value={fatigue} disabled={busy || !!error} onChange={e => setFatigue(Number(e.target.value))} style={{ width: '100%', margin: '14px 0' }} /></label>

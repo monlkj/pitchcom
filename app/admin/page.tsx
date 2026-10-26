@@ -9,6 +9,7 @@ import AccountDeletionForm from './components/AccountDeletionForm';
 import { markAccountsDeleted, withoutDeletedAccounts } from '../../lib/accountDeletion';
 import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
 import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
+import { participatesAsPlayer } from '../../lib/playerParticipation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 
 interface Member {
@@ -17,6 +18,7 @@ interface Member {
   email: string;
   role: string;
   authUserId?: string;
+  playsAsPlayer?: boolean;
   coachType?: string;
   coachTypes?: string[];
   teamCode: string;
@@ -237,7 +239,7 @@ export default function AdminPage() {
           ['전체', members.length, '#60a5fa'],
           ['감독', members.filter(m => m.role === 'manager').length, '#f59e0b'],
           ['코치', members.filter(m => m.role === 'coach').length, '#10b981'],
-          ['선수', members.filter(m => m.role === 'player').length, '#a78bfa'],
+          ['선수', members.filter(m => participatesAsPlayer(m)).length, '#a78bfa'],
         ].map(([label, count, color]) => (
           <div key={label as string} style={{ textAlign: 'center' }}>
             <div style={{ fontSize: 22, fontWeight: 900, color: color as string }}>{count as number}</div>
@@ -259,7 +261,7 @@ export default function AdminPage() {
               </div>
               <div style={{ fontSize: 12, color: '#60a5fa', overflowWrap: 'anywhere' }}>{me.email}</div>
             </div>
-            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700 }}>감독</span>
+            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700, maxWidth: 150, overflowWrap: 'anywhere' }}>감독{me.playsAsPlayer ? ' · 선수 겸임' : ''}{getCoachTypes(me).length ? ` · ${coachLabel(me)}` : ''}</span>
           </div>
         </div>
       )}
@@ -289,7 +291,7 @@ export default function AdminPage() {
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (m.role === 'player' && leadership.captainId === m.id ? '⭐ 주장' : m.role === 'player' && leadership.viceCaptainId === m.id ? '🌟 부주장' : ROLE_LABEL[m.role] ?? m.role)}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (m.role === 'player' && leadership.captainId === m.id ? '⭐ 주장' : m.role === 'player' && leadership.viceCaptainId === m.id ? '🌟 부주장' : ROLE_LABEL[m.role] ?? m.role)}{m.role !== 'player' && m.playsAsPlayer ? ' · 선수 겸임' : ''}{m.role === 'manager' && getCoachTypes(m).length ? ` · ${coachLabel(m)}` : ''}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
                   <button disabled={Boolean(kickingId || deletingId)} onClick={() => kickMember(m)} style={{

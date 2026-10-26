@@ -26,6 +26,7 @@ interface LocalUser {
   createdAt?: string;
   identityVersion?: number;
   role: Role;
+  playsAsPlayer?: boolean;
   coachType?: string;
   coachTypes?: string[];
   teamCode: string;
@@ -41,7 +42,7 @@ function saveUsers(users: LocalUser[]) {
 }
 function setSession(user: LocalUser, authUserId?: string) {
   migrateTeamCache();
-  localStorage.setItem('pitchcom-session', JSON.stringify({ identityVersion: user.identityVersion, authUserId, id: user.id, name: user.name, role: user.role, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
+  localStorage.setItem('pitchcom-session', JSON.stringify({ identityVersion: user.identityVersion, authUserId, id: user.id, name: user.name, role: user.role, playsAsPlayer: user.playsAsPlayer, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
 }
 
 const ROLES = [

@@ -1,12 +1,13 @@
 'use client';
 
+import { participatesAsPlayer } from '../../lib/playerParticipation';
 import { teamStorage } from '../../lib/teamStorage';
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 
-interface Player { id: string; name: string; number: string; position: string[]; }
+interface Player { id: string; name: string; number: string; position: string[]; accountId?: string; }
 interface Team { id: string; name: string; players: Player[]; }
 interface BatStats { pa: number; ab: number; h: number; d: number; t: number; hr: number; bb: number; hbp: number; rbi: number; r: number; so: number; }
 interface PitStats { ip: number; ha: number; er: number; bb: number; k: number; hbp: number; hr: number; }
@@ -78,6 +79,10 @@ export default function TeamPage() {
   const [pickingSlot, setPickingSlot] = useState<{ type: 'lineup'|'rotation'; idx: number } | null>(null);
   const [pickingPos, setPickingPos] = useState<number | null>(null);
   const [playerSort, setPlayerSort] = useState<'가나다'|'번호'|'타율'|'장타율'|'OPS'|'출루율'|'ERA'|'K9'>('가나다');
+  const [selfAccount, setSelfAccount] = useState<any>(null);
+  const [linkPlayerId, setLinkPlayerId] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkError, setLinkError] = useState('');
   const [statsTeam, setStatsTeam] = useState('all');
 
   useEffect(() => {
@@ -85,6 +90,7 @@ export default function TeamPage() {
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
     setIsManager(session.role === 'manager');
+    setSelfAccount(session);
     setIsCoach(session.role === 'coach');
     const code = session.teamCode ?? '';
     setTeamCode(code);
@@ -128,6 +134,30 @@ export default function TeamPage() {
   const saveTeams = (next: Team[]) => { setTeams(next); teamStorage.setItem('pitchcom-teams', JSON.stringify(next)); syncWrite(teamCode, 'teams', next); };
   const saveBat = (next: AllBat) => { setAllBat(next); teamStorage.setItem('pitchcom-bat-stats', JSON.stringify(next)); syncWrite(teamCode, 'bat-stats', next); };
   const savePit = (next: AllPit) => { setAllPit(next); teamStorage.setItem('pitchcom-pit-stats', JSON.stringify(next)); syncWrite(teamCode, 'pit-stats', next); };
+
+  const registerSelf = async () => {
+    if (linkBusy || !selfAccount || !participatesAsPlayer(selfAccount) || !(isManager || isCoach) || !selectedTeam) return;
+    setLinkBusy(true); setLinkError('');
+    try {
+      const users = await syncRead('__global__', 'users', true);
+      const actor = Array.isArray(users) && users.find(u => u.id === selfAccount.id && u.teamCode === teamCode && u.role === selfAccount.role && participatesAsPlayer(u) && (u.role === 'manager' || u.joinApproved === true));
+      const live = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
+      if (!actor || live.id !== actor.id || live.teamCode !== teamCode) throw new Error('changed');
+      const latest = await syncRead(teamCode, 'teams', true);
+      if (!Array.isArray(latest) || !latest.some(t => t.id === selectedTeam)) throw new Error('missing team');
+      if (latest.some(t => t.players.some((p: Player) => p.accountId === actor.id))) throw new Error('already linked');
+      const target = latest.find(t => t.id === selectedTeam);
+      const existing = linkPlayerId ? target.players.find((p: Player) => p.id === linkPlayerId && !p.accountId) : null;
+      if (linkPlayerId && !existing) throw new Error('changed player');
+      const next = latest.map(t => t.id !== selectedTeam ? t : { ...t, players: existing
+        ? t.players.map((p: Player) => p.id === existing.id ? { ...p, accountId: actor.id } : p)
+        : [...t.players, { id: crypto.randomUUID(), accountId: actor.id, name: actor.name, number: '', position: [] }] });
+      await syncWrite(teamCode, 'teams', next, true);
+      if (JSON.parse(localStorage.getItem('pitchcom-session') || '{}').teamCode !== teamCode) throw new Error('changed');
+      setTeams(next); teamStorage.setItem('pitchcom-teams', JSON.stringify(next)); setLinkPlayerId('');
+    } catch { setLinkError('연결하지 못했어요. 이미 등록되었는지, 현재 팀과 연결 상태를 확인해 주세요.'); }
+    finally { setLinkBusy(false); }
+  };
 
   const addTeam = () => {
     const name = newTeamName.trim(); if (!name) return;
@@ -266,6 +296,13 @@ export default function TeamPage() {
                     style={{ padding: '8px 16px', borderRadius: 10, border: 'none', background: '#10b981', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>+ 선수 추가</button>
                 )}
               </div>
+              {(isManager || isCoach) && participatesAsPlayer(selfAccount) && !teams.some(t => t.players.some(p => p.accountId === selfAccount?.id)) && <section style={{ padding: 14, marginBottom: 14, background: '#1e293b', borderRadius: 12 }}>
+                <strong style={{ color: '#e2e8f0', fontSize: 14 }}>내 선수 기록 연결</strong>
+                <p style={{ fontSize: 12, color: '#94a3b8' }}>이미 내 기록이 있다면 해당 선수를 선택하세요. 기존 기록과 포지션이 유지돼요.</p>
+                <select aria-label="내 선수 기록 연결" disabled={linkBusy} value={linkPlayerId} onChange={e => setLinkPlayerId(e.target.value)} style={{ width: '100%', padding: 10, background: '#0f172a', color: '#e2e8f0', border: '1px solid #475569', borderRadius: 8 }}><option value="">새 선수로 등록 ({selfAccount?.name})</option>{currentTeam.players.filter(p => !p.accountId).map(p => <option key={p.id} value={p.id}>{p.name} · #{p.number || '미지정'}</option>)}</select>
+                <button disabled={linkBusy || syncing} onClick={registerSelf} style={{ marginTop: 10, padding: '10px 14px', border: 0, borderRadius: 8, background: '#2563eb', color: '#fff' }}>{linkBusy ? '저장 중…' : linkPlayerId ? '이 선수 기록을 내 계정에 연결' : '나를 선수로 등록'}</button>
+                {linkError && <p role="alert" style={{ color: '#fca5a5', fontSize: 12 }}>{linkError}</p>}
+              </section>}
               {/* 정렬 기준 */}
               <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 14 }}>
                 {(['가나다','번호','타율','장타율','OPS','출루율','ERA','K9'] as const).map(s => (

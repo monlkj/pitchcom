@@ -42,3 +42,9 @@ Chat explicitly aligns the active account's messages on the right and others on 
 Chat refreshes every five seconds and on focus/online, skips in-flight operations, and discards reads started before a mutation. Sending uses fresh data, UUID message IDs, a 2000-character limit and IME-safe Enter handling. Failed sends retain the draft. Failure notifications are separate from background-refresh errors. Updated clients wait for a successful initial chat read before displaying cached history. Old deployed clients must be refreshed to understand hiding/deletion markers.
 
 Browser checks with fake users covered left/right layout; received-message account-only deletion; persistence on reload and another device; sender-only everyone deletion including a director's restricted menu; recipient refresh; stale-list reappearance prevention; failed deletes; partial-cleanup retry; separate-team UI and mobile widths.
+
+### 대표 역할과 선수 겸임
+
+홈의 ‘내 활동 설정’에서 감독·코치는 ‘선수로도 활동’을 저장할 수 있습니다. 대표 역할(`role`)과 팀 소유권은 변경하지 않고 `playsAsPlayer`만 별도로 저장합니다. 감독은 겸임 코치 업무도 여러 개 선택할 수 있습니다. 로그인 및 다른 기기에서의 세션 갱신에도 선수 겸임 상태를 반영합니다.
+
+겸임자는 컨디션에서 ‘팀 제출 현황’과 ‘내 컨디션’을 모두 사용할 수 있습니다. 팀/선수 관리에서는 선택한 명단의 기존 선수와 본인 계정을 명시적으로 연결하거나 새 선수로 등록합니다. 동명이인을 자동으로 연결하지 않으며, 기존 선수 ID·기록·포지션을 유지합니다. 선수 겸임을 꺼도 명단 및 과거 기록은 삭제하지 않습니다. 기존 팀 데이터와 마찬가지로 공유 JSON 저장 방식이며 서버 권한 정책의 전면 개편을 포함하지 않습니다.
