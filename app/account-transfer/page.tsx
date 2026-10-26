@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { transferGoogle } from '../../lib/transferGoogle';
 
 type Session = { id: string; email: string; authUserId?: string };
-type Preview = { sourceIdentifier: string; targetIdentifier: string; name: string; role: string; teamCode: string; revision: string };
+type Preview = { sourceIdentifier: string; targetIdentifier: string; name: string; role: string; teamCode: string; revision: string; preservesTarget?: boolean; returnTeamCode?: string };
 export default function AccountTransferPage() {
   const [source, setSource] = useState<Session | null>(null);
   const [sourceIdentifier, setSourceIdentifier] = useState(''); const [sourcePassword, setSourcePassword] = useState('');
@@ -78,6 +78,7 @@ export default function AccountTransferPage() {
         <h2 style={{ marginTop: 0, fontSize: 18 }}>전환할 내용을 확인해 주세요</h2>
         <p style={{ color: '#94a3b8', overflowWrap: 'anywhere' }}>{preview.sourceIdentifier} → <strong style={{ color: '#93c5fd' }}>{preview.targetIdentifier}</strong></p>
         <p style={{ lineHeight: 1.8 }}>유지할 이름: {preview.name}<br/>역할: {preview.role === 'manager' ? '감독' : preview.role === 'coach' ? '코치' : '선수'}<br/>팀: {preview.teamCode || '무소속'}</p>
+        {preview.preservesTarget && <p style={{ color: '#fde68a', fontSize: 13, lineHeight: 1.8 }}>전환할 계정의 기존 정보{preview.returnTeamCode ? ` (${preview.returnTeamCode}팀)` : ''}는 따로 보관해요. 전환 후에는 위 팀의 정보만 보이며, 그 팀에서 내보내지거나 팀을 나가면 기존 계정 정보로 자동 복귀해요. 이전 팀의 역할과 기록도 돌아와요.</p>}
         <p style={{ color: '#94a3b8', fontSize: 13 }}>팀 기록, 승인 상태, 주장·부주장, 메시지와 개인 기록은 기존 고유번호로 유지됩니다.</p>
         <button disabled={busy} onClick={() => submit('commit')} style={ui.primary}>{busy ? '전환 중…' : '이 정보로 계정 전환'}</button>
         <button disabled={busy} onClick={() => setPreview(null)} style={{ ...ui.button, marginLeft: 8 }}>다시 입력</button>
@@ -97,7 +98,7 @@ export default function AccountTransferPage() {
           </> : <><button type="button" onClick={authorizeGoogle} style={ui.primary}>전환할 Google 계정 인증</button>{googleEmail && <p style={{ color: '#86efac', overflowWrap: 'anywhere', fontSize: 13 }}>인증 완료: {googleEmail}</p>}</>}
         </fieldset>
         {authenticating && <p role="status" style={{ color: '#93c5fd' }}>팝업에서 구글 계정을 선택해 주세요.</p>}
-        <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.8 }}>전환할 계정에 이미 팀이나 활동 기록이 있으면 자동으로 합치거나 덮어쓰지 않아요.</p>
+        <p style={{ fontSize: 12, color: '#94a3b8', margin: 0, lineHeight: 1.8 }}>전환할 계정의 기존 팀·기록은 별도로 보관해요. 전환한 팀에서 나가면 기존 계정 정보로 자동 복귀하며, 두 팀의 기록을 합치거나 삭제하지 않아요.</p>
         <button disabled={busy || authenticating || (targetType === 'google' && !googleToken)} style={ui.primary}>{busy ? '확인 중…' : '전환 내용 확인'}</button>
       </form>}
     </>}

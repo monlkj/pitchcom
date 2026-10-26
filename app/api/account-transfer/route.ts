@@ -1,6 +1,7 @@
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { supabase } from '../../../lib/supabase';
 import { hashTemporaryPassword, verifyTemporaryPassword, type TemporaryCredential } from '../../../lib/temporaryAccounts';
+import { archiveTransferProfile, ownedTeamCodes } from '../../../lib/transferTeamReturn';
 import { activeProfiles, type IdentityProfile } from '../../../lib/accountIdentity';
 
 export const runtime = 'nodejs';
@@ -77,18 +78,18 @@ export async function POST(request: Request) {
     if (deleted.error) return reply('계정 상태를 확인하지 못했습니다.', 503);
     const deletedIds = new Set((deleted.data || []).map((row: { data: { id: string } }) => row.data?.id));
     if (deletedIds.has(source.id) || (target && deletedIds.has(target.id))) throw new Error('삭제된 계정으로는 전환할 수 없습니다.');
-    if (target && !await targetIsUnused(target)) throw new Error('전환할 계정에도 팀이나 활동 기록이 있습니다. 기존 정보를 덮어쓰지 않도록 전환을 중단했습니다. 사용하지 않은 계정을 선택해 주세요.');
-    const summary = { sourceIdentifier: source.email, targetIdentifier: identifier, name: source.name, role: source.role, teamCode: source.teamCode, revision: snapshot.data.updated_at };
+    if (source.transferReturnId || target?.transferReturnId) throw new Error('이전 팀으로 돌아갈 정보가 보관되어 있습니다. 먼저 현재 팀에서 나가 이전 계정으로 돌아온 뒤 다시 전환해 주세요.');
+    if (target && stored.filter(profile => profile.id === target.id).length !== 1) throw new Error('전환할 계정의 고유번호가 중복되어 있습니다.');
+    const preserveTarget = target ? !await targetIsUnused(target) : false;
+    const summary = { sourceIdentifier: source.email, targetIdentifier: identifier, name: source.name, role: source.role, teamCode: source.teamCode, revision: snapshot.data.updated_at, returnTeamCode: preserveTarget ? target?.teamCode || '' : undefined, preservesTarget: preserveTarget };
     if (input.action === 'preview') { attempts.delete(attemptKey); return Response.json({ preview: summary }, { headers: { 'Cache-Control': 'no-store' } }); }
     if (input.revision !== snapshot.data.updated_at) return reply('계정 정보가 변경되었습니다. 전환 내용을 다시 확인해 주세요.', 409);
     const { password: _password, temporaryCredential: _credential, authUserId: _auth, accountType: _type, ...preserved } = source;
     const updated = { ...preserved, email: identifier, identityVersion: (Number(source.identityVersion) || 0) + 1, identityChangedAt: new Date().toISOString(),
+      ...(preserveTarget && target ? { transferReturnId: target.id, reservedManagedTeamCodes: [...new Set([...ownedTeamCodes(source), ...ownedTeamCodes(target)])] } : {}),
       ...(authUserId ? { authUserId } : { accountType: 'temporary', temporaryCredential: await hashTemporaryPassword(input.targetPassword) }) };
-    const next = stored.map(profile => profile.id === source.id ? updated : target && profile.id === target.id ? {
-      id: profile.id, name: profile.name, email: '', role: profile.role, teamCode: '', transferredTo: source.id,
-      formerIdentifier: profile.email, transferredAt: new Date().toISOString(),
-    } : profile);
-    // One compare-and-swap UPDATE changes the identity and archives an unused target atomically.
+    const next = stored.map(profile => profile.id === source.id ? updated : target && profile.id === target.id ? archiveTransferProfile(profile, source.id) : profile);
+    // One compare-and-swap UPDATE changes the identity and parks the previous target atomically.
     const saved = await supabase.from('team_shared_data').update({ data: next, updated_at: new Date().toISOString() })
       .eq('team_code', '__global__').eq('data_key', 'users').eq('updated_at', snapshot.data.updated_at).select('updated_at');
     if (saved.error) return reply('계정 전환을 저장하지 못했습니다. 다시 확인해 주세요.', 503);

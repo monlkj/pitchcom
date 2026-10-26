@@ -1,4 +1,5 @@
 import { activeProfiles, preserveIdentityChanges } from './accountIdentity';
+import { restoreTransferTeams } from './transferTeamReturn';
 import { supabase } from './supabase';
 import { isDeletedAccount, refreshDeletedAccounts } from './accountDeletion';
 
@@ -30,11 +31,22 @@ export async function syncWrite(teamCode: string, key: string, value: any, stric
   if (key !== 'join-requests' && !canUseTeam(teamCode)) { if (strict) throw new Error('현재 팀에서 저장할 권한이 없습니다.'); return; }
   try {
     if (teamCode === '__global__' && key === 'users') {
-      const latest = await supabase.from('team_shared_data').select('data').eq('team_code', '__global__').eq('data_key', 'users').maybeSingle();
+      const latest = await supabase.from('team_shared_data').select('data,updated_at').eq('team_code', '__global__').eq('data_key', 'users').maybeSingle();
       if (latest.error) throw latest.error;
       if (Array.isArray(latest.data?.data)) value = preserveIdentityChanges(value, latest.data.data);
       const deleted = await refreshDeletedAccounts();
       value = value.filter((user: { id: string }) => !deleted.has(user.id));
+      if (Array.isArray(latest.data?.data)) {
+        const result = restoreTransferTeams(value, latest.data.data);
+        value = result.profiles;
+        if (result.restored) {
+          if (!latest.data.updated_at) throw new Error('계정 변경 버전을 확인하지 못했습니다.');
+          const saved = await supabase.from('team_shared_data').update({ data: value, updated_at: new Date().toISOString() })
+            .eq('team_code', '__global__').eq('data_key', 'users').eq('updated_at', latest.data.updated_at).select('updated_at');
+          if (saved.error || !saved.data?.length) throw new Error('다른 계정 변경이 있어 이전 팀 복귀를 저장하지 못했습니다. 다시 시도해 주세요.');
+          return;
+        }
+      }
     }
     const { error } = await supabase.from('team_shared_data').upsert({
       team_code: teamCode,

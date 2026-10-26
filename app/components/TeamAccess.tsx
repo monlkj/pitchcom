@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import { profileSession } from '../../lib/profileSession';
 import { supabase } from '../../lib/supabase';
 import { syncRead } from '../../lib/teamSync';
 import { refreshDeletedAccounts } from '../../lib/accountDeletion';
@@ -55,6 +56,15 @@ export default function TeamAccess({ children }: { children: React.ReactNode }) 
         const users = await syncRead('__global__', 'users', true);
         if (!active || localStorage.getItem('pitchcom-session') !== rawSession) return;
         const remote = Array.isArray(users) ? users.find((user: { id: string }) => user.id === session.id) : null;
+        if (!remote && Array.isArray(users)) {
+          const returned = users.find(user => user.teamReturn?.fromId === session.id && user.teamReturn?.fromIdentityVersion === (session.identityVersion ?? 0) && user.email === session.email && user.authUserId === session.authUserId);
+          if (returned && !deleted.has(returned.id)) {
+            migrateTeamCache();
+            localStorage.setItem('pitchcom-session', JSON.stringify(profileSession(returned)));
+            localStorage.removeItem('pitchcom-users');
+            window.location.assign('/home'); return;
+          }
+        }
         if (!remote || remote.email !== session.email || (remote.identityVersion ?? 0) !== (session.identityVersion ?? 0) || remote.authUserId !== session.authUserId) {
           localStorage.removeItem('pitchcom-session'); setAllowedPath(''); router.replace('/login'); return;
         }

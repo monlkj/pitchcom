@@ -1,5 +1,7 @@
 'use client';
 
+import { profileSession } from '../../lib/profileSession';
+import type { IdentityProfile } from '../../lib/accountIdentity';
 import { useEffect, useRef, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { supabase } from '../../lib/supabase';
@@ -13,9 +15,10 @@ import { migrateTeamCache } from '../../lib/teamStorage';
 
 const GLOBAL = '__global__';
 
+
 type Role = 'manager' | 'coach' | 'player';
 
-interface LocalUser {
+interface LocalUser extends IdentityProfile {
   id: string;
   name: string;
   email: string;
@@ -42,7 +45,7 @@ function saveUsers(users: LocalUser[]) {
 }
 function setSession(user: LocalUser, authUserId?: string) {
   migrateTeamCache();
-  localStorage.setItem('pitchcom-session', JSON.stringify({ identityVersion: user.identityVersion, authUserId, id: user.id, name: user.name, role: user.role, playsAsPlayer: user.playsAsPlayer, coachType: user.coachType, coachTypes: user.coachTypes, teamCode: user.teamCode, email: user.email, joinApproved: user.joinApproved, joinRequestId: user.joinRequestId, managedTeamCodes: user.managedTeamCodes, removalNotice: user.removalNotice }));
+  localStorage.setItem('pitchcom-session', JSON.stringify(profileSession(user, authUserId)));
 }
 
 const ROLES = [

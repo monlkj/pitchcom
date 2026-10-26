@@ -6,7 +6,7 @@ import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
 import { withoutDeletedAccounts } from '../../lib/accountDeletion';
-import { managedTeams, sameAccount } from '../../lib/managerTeams';
+import { managedTeams, sameAccount, ownsTeam } from '../../lib/managerTeams';
 import { resolveLeadership } from '../../lib/teamLeadership';
 import { coachLabel } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
@@ -24,6 +24,8 @@ const MENUS = [
 export default function Home() {
   const router = useRouter();
   const [removalNotice, setRemovalNotice] = useState<{ id: string; teamCode: string } | null>(null);
+  const [returnedTeam, setReturnedTeam] = useState<string | null>(null);
+  const [returnTeamAvailable, setReturnTeamAvailable] = useState(false);
   const [ready, setReady] = useState(false);
   const [userName, setUserName] = useState('');
   const [playerTitle, setPlayerTitle] = useState('선수');
@@ -70,6 +72,8 @@ export default function Home() {
     migrateTeamCache();
     if (session.removalNotice && localStorage.getItem(`pitchcomDismissedRemoval:${session.id}`) !== session.removalNotice.id) setRemovalNotice(session.removalNotice);
     setPendingCount(0);
+    setReturnTeamAvailable(Boolean(session.transferReturnId));
+    if (session.teamReturn && localStorage.getItem(`pitchcomDismissedReturn:${session.id}`) !== session.teamReturn.at) setReturnedTeam(session.teamCode || '무소속');
     setUserName(session.name ?? '');
     setUserRole(session.role ?? '');
     setPlaysAsPlayer(session.playsAsPlayer === true);
@@ -114,13 +118,13 @@ export default function Home() {
 
   const saveCode = async (targetCode?: string, leave = false) => {
     const code = (typeof targetCode === 'string' ? targetCode : newCode).trim().toUpperCase();
-    if (!code && !leave) { setCodeError('팀 코드를 입력해주세요'); return; }
+    if (!code && !leave && userRole !== 'manager') { setCodeError('팀 코드를 입력해주세요'); return; }
     if (savingCode) return;
     setSavingCode(true);
     try {
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       if (!session.id) return;
-      if (session.teamCode === code) { setEditingCode(false); return; }
+      if (session.teamCode === code && !(leave && session.transferReturnId)) { setEditingCode(false); return; }
       const localUsers: any[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
       const cloud = await syncRead('__global__', 'users', true);
       const users: any[] = Array.isArray(cloud) ? [...cloud] : [...localUsers];
@@ -128,18 +132,19 @@ export default function Home() {
       const me = users.find(u => u.id === session.id) ?? users.find(u => sameAccount(u, session)) ?? session;
       const isManager = session.role === 'manager';
       const managed = managedTeams(users, session);
-      const owner = users.find(u => u.role === 'manager' && !sameAccount(u, session) && managedTeams([], u).includes(code));
-      if (!isManager && code && !users.some(u => u.role === 'manager' && managedTeams([], u).includes(code))) {
+      const owner = users.find(u => !sameAccount(u, session) && ownsTeam(u, code));
+      if (!isManager && code && !users.some(u => ownsTeam(u, code))) {
         setCodeError('존재하지 않는 팀 코드예요'); return;
       }
       if (isManager && code && owner) { setCodeError('이 팀에는 이미 감독이 있습니다.'); return; }
       migrateTeamCache();
-      const requestId = isManager || !code ? undefined : crypto.randomUUID();
-      const next = { ...me, ...session, teamCode: code, joinApproved: isManager, joinRequestId: requestId,
+      const resumingOwnedTeam = Boolean(code && ownsTeam(me, code));
+      const requestId = isManager || !code || resumingOwnedTeam ? undefined : crypto.randomUUID();
+      const next = { ...me, ...session, ...(leave && session.transferReturnId ? { requestTransferReturn: true } : {}), teamCode: code, joinApproved: isManager, joinRequestId: requestId,
         ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, ...(code ? [code] : [])])) } : {}) };
       const updated = users.filter(u => u.id !== session.id).map(u => isManager && u.role === 'manager' && sameAccount(u, session)
         ? { ...u, teamCode: code, joinApproved: true, managedTeamCodes: next.managedTeamCodes } : u).concat(next);
-      if (!isManager && code) {
+      if (!isManager && code && !resumingOwnedTeam) {
         const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
         const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, coachTypes: session.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
         await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
@@ -191,6 +196,8 @@ export default function Home() {
           </div>
         </div>
 
+        {returnedTeam !== null && <section role="status" style={{ maxWidth: 480, margin: '20px auto', padding: 16, background: '#123529', color: '#bbf7d0', borderRadius: 14 }}>이전에 보관한 {returnedTeam === '무소속' ? '무소속 계정' : `${returnedTeam}팀`} 정보로 돌아왔어요. 역할과 기존 기록도 복원됐어요.<button type="button" onClick={() => { const s = JSON.parse(localStorage.getItem('pitchcom-session') || '{}'); localStorage.setItem(`pitchcomDismissedReturn:${s.id}`, s.teamReturn?.at || ''); setReturnedTeam(null); }} style={{ marginLeft: 8, border: 0, background: 'transparent', color: '#bbf7d0', cursor: 'pointer' }}>닫기</button></section>}
+        {returnTeamAvailable && !teamCode && <div style={{ maxWidth: 480, margin: '16px auto', padding: '0 16px' }}><button disabled={savingCode} onClick={() => saveCode('', true)} style={{ padding: '12px 16px', width: '100%', borderRadius: 12, border: '1px solid #475569', background: '#1e293b', color: '#93c5fd' }}>보관한 이전 계정 정보로 돌아가기</button>{codeError && <p role="alert" style={{ color: '#fca5a5' }}>{codeError}</p>}</div>}
         <ParticipationSettings />
 
         {removalNotice && <section role="alert" style={{ maxWidth: 480, margin: '20px auto', padding: '16px 20px', border: '1px solid #f59e0b66', borderRadius: 14, background: '#332812', color: '#fde68a' }}>
@@ -325,7 +332,7 @@ export default function Home() {
                   </div>
                 )}
                 <p style={{ margin: '12px 0 8px', color: '#94a3b8', fontSize: 12, lineHeight: 1.7 }}>
-                  {userRole === 'manager' ? '다른 팀 코드로 이동해도 기록은 팀별로 보관됩니다. 원래 코드를 다시 입력하면 승인 없이 돌아올 수 있어요.' : '팀에서 나가거나 다른 팀으로 이동하면, 다시 들어올 때 감독의 승인을 받아야 해요.'}
+                  {returnTeamAvailable ? '전환 전에 사용하던 팀 정보가 보관되어 있어요. 팀에서 나가면 그 계정 정보로 자동 돌아갑니다.' : userRole === 'manager' ? '다른 팀 코드로 이동해도 기록은 팀별로 보관됩니다. 원래 코드를 다시 입력하면 승인 없이 돌아올 수 있어요.' : '팀에서 나가거나 다른 팀으로 이동하면, 다시 들어올 때 감독의 승인을 받아야 해요.'}
                 </p>
                 <button disabled={savingCode} onClick={() => saveCode('', true)} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #475569', background: 'transparent', color: '#cbd5e1', fontSize: 12, cursor: 'pointer' }}>팀에서 나가기</button>
                 {!editingCode && codeError && <p role="alert" style={{ marginTop: 10, color: '#f87171', fontSize: 12 }}>{codeError}</p>}
