@@ -287,7 +287,6 @@ export default function LoginPage() {
             {googleUser && <p style={{ color: '#93c5fd', fontSize: 14 }}>{linkNeeded ? '기존 팀과 기록을 연결하려면 PitchCom 비밀번호를 한 번 입력해 주세요.' : '구글 인증 완료! 이름과 역할을 선택해 주세요.'}</p>}
             {tab === 'signup' && step !== 'info' && error && <p role="alert" style={{ color: '#f87171' }}>{error}</p>}
             {googleUser && <button disabled={loading} onClick={async () => { await supabase.auth.signOut({ scope: 'local' }); window.location.assign('/login'); }} style={{ background: 'transparent', color: '#94a3b8', border: 'none', cursor: 'pointer', marginBottom: 12 }}>다른 계정으로 로그인</button>}
-            {!googleUser && tab === 'login' && <button type="button" disabled={loading} onClick={() => { setTab('signup'); resetSignup(); setSelectedCoachTypes([]); setTemporaryOpen(false); setPassword(''); setConfirmation(''); }} style={{ ...btnPrimary, marginBottom: 12 }}>임시 계정으로 회원가입</button>}
             {!googleUser && tab === 'signup' && <div style={{ marginBottom: 18 }}>
               <h2 style={{ margin: '0 0 8px', fontSize: 18, color: '#f8fafc' }}>임시 계정 회원가입</h2>
               <p style={{ color: '#94a3b8', fontSize: 13, lineHeight: 1.7 }}>구글 없이 감독·코치·선수 모두 가입할 수 있어요. 아이디 또는 이메일을 입력해 주세요.</p>
@@ -300,6 +299,13 @@ export default function LoginPage() {
                 <input type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>e.key==='Enter'&&handleLogin()} placeholder="비밀번호" style={inputStyle} />
                 {error && <div style={{ padding:'10px 14px', borderRadius:10, background:'rgba(239,68,68,0.1)', border:'1px solid rgba(239,68,68,0.3)', color:'#f87171', fontSize:13, fontWeight:600 }}>⚠️ {error}</div>}
                 <button onClick={handleLogin} disabled={loading} style={btnPrimary}>{loading ? '로그인 중...' : linkNeeded ? '기존 계정 연결하기' : '로그인 →'}</button>
+              </div>
+            )}
+
+            {!googleUser && tab === 'login' && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20, color: '#94a3b8', fontSize: 14 }}>
+                <span>계정이 없나요?</span>
+                <button type="button" disabled={loading} onClick={() => { setTab('signup'); resetSignup(); setSelectedCoachTypes([]); setTemporaryOpen(false); setPassword(''); setConfirmation(''); }} style={{ border: 'none', background: 'transparent', padding: '8px 4px', color: '#93c5fd', fontSize: 14, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: 3, cursor: loading ? 'default' : 'pointer' }}>회원가입하기</button>
               </div>
             )}
 
