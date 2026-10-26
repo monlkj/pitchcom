@@ -129,7 +129,7 @@ export default function Home() {
       if (!isManager && code && !users.some(u => u.role === 'manager' && managedTeams([], u).includes(code))) {
         setCodeError('존재하지 않는 팀 코드예요'); return;
       }
-      if (isManager && code && owner) { setCodeError('다른 감독이 사용 중인 팀 코드예요'); return; }
+      if (isManager && code && owner) { setCodeError('이 팀에는 이미 감독이 있습니다.'); return; }
       migrateTeamCache();
       const requestId = isManager || !code ? undefined : crypto.randomUUID();
       const next = { ...me, ...session, teamCode: code, joinApproved: isManager, joinRequestId: requestId,
@@ -244,7 +244,7 @@ export default function Home() {
                   textAlign: 'center', marginBottom: 12, transition: 'border-color 0.2s',
                 }}
               />
-              {codeError && <p style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
+              {codeError && <p role="alert" style={{ margin: '0 0 10px', fontSize: 12, color: '#f87171', textAlign: 'center' }}>⚠️ {codeError}</p>}
               <button disabled={savingCode} onClick={() => saveCode()} style={{
                 width: '100%', padding: '15px', borderRadius: 12, border: 'none',
                 background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
@@ -284,7 +284,7 @@ export default function Home() {
                     color: '#fff', fontSize: 14, fontWeight: 900, cursor: 'pointer',
                   }}>입장</button>
                 </div>
-                {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
+                {codeError && <p role="alert" style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
               </div>
             )}
 
@@ -306,7 +306,7 @@ export default function Home() {
                       <button disabled={savingCode} onClick={() => saveCode()} style={{ padding: '10px 16px', borderRadius: 10, border: 'none', background: '#3b82f6', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>저장</button>
                       <button onClick={() => { setEditingCode(false); setCodeError(''); }} style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid #334155', background: 'transparent', color: '#64748b', cursor: 'pointer' }}>취소</button>
                     </div>
-                    {codeError && <p style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
+                    {codeError && <p role="alert" style={{ margin: '8px 0 0', fontSize: 12, color: '#f87171' }}>⚠️ {codeError}</p>}
                   </div>
                 ) : (
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
