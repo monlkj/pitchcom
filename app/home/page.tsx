@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { useRouter } from 'next/navigation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
-import { managedTeams, sameAccount, ownsTeam } from '../../lib/managerTeams';
+import { planTeamChange, resolveTeamChangeResult } from '../../lib/teamMembership';
+import { profileSession } from '../../lib/profileSession';
 import { resolveLeadership } from '../../lib/teamLeadership';
 import { coachLabel } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
@@ -123,37 +124,28 @@ export default function Home() {
     try {
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       if (!session.id) return;
-      if (session.teamCode === code && !(leave && session.transferReturnId)) { setEditingCode(false); return; }
       const cloud = await syncRead('__global__', 'users', true);
       if (!Array.isArray(cloud)) throw new Error('계정 목록을 확인할 수 없습니다.');
-      const users: any[] = [...cloud];
-      const me = users.find(u => u.id === session.id);
-      if (!me || me.role !== session.role || me.teamCode !== session.teamCode) throw new Error('계정 상태가 변경되었습니다.');
-      const isManager = me.role === 'manager';
-      const managed = managedTeams(users, session);
-      const owner = users.find(u => !sameAccount(u, session) && ownsTeam(u, code));
-      if (!isManager && code && !users.some(u => ownsTeam(u, code))) {
-        setCodeError('존재하지 않는 팀 코드예요'); return;
+      const plan = planTeamChange(cloud, session, code, leave, crypto.randomUUID());
+      if (!plan.unchanged) {
+        migrateTeamCache();
+        if (plan.needsRequest) {
+          const requests: any[] = (await syncRead(code, 'join-requests', true)) ?? [];
+          const request = { id: plan.member.joinRequestId, userId: plan.member.id, userName: plan.member.name, userRole: plan.member.role, coachType: plan.member.coachType, coachTypes: plan.member.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
+          await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
+        }
+        await syncWrite('__global__', 'users', plan.members, true);
       }
-      if (isManager && code && owner) { setCodeError('이 팀에는 이미 감독이 있습니다.'); return; }
-      migrateTeamCache();
-      const resumingOwnedTeam = Boolean(code && ownsTeam(me, code));
-      const requestId = isManager || !code || resumingOwnedTeam ? undefined : crypto.randomUUID();
-      const next = { ...me, ...session, ...(leave && session.transferReturnId ? { requestTransferReturn: true } : {}), teamCode: code, joinApproved: isManager, joinRequestId: requestId,
-        ...(isManager ? { managedTeamCodes: Array.from(new Set([...managed, ...(code ? [code] : [])])) } : {}) };
-      const updated = users.filter(u => u.id !== session.id).map(u => isManager && u.role === 'manager' && sameAccount(u, session)
-        ? { ...u, teamCode: code, joinApproved: true, managedTeamCodes: next.managedTeamCodes } : u).concat(next);
-      if (!isManager && code && !resumingOwnedTeam) {
-        const requests: any[] = (await syncRead(code, 'join-requests')) ?? [];
-        const request = { id: requestId, userId: session.id, userName: session.name, userRole: session.role, coachType: session.coachType, coachTypes: session.coachTypes, teamCode: code, status: 'pending', createdAt: new Date().toISOString() };
-        await syncWrite(code, 'join-requests', requests.filter(r => r.userId !== session.id).concat(request), true);
-      }
-      await syncWrite('__global__', 'users', updated, true);
-      localStorage.setItem('pitchcom-users', JSON.stringify(updated));
-      localStorage.setItem('pitchcom-session', JSON.stringify(next));
+      // Saving may restore a parked director profile with a different ID. Read
+      // the actual result instead of writing the previous profile back locally.
+      const savedUsers = await syncRead('__global__', 'users', true);
+      const saved = Array.isArray(savedUsers) ? resolveTeamChangeResult(savedUsers, plan.member) : undefined;
+      if (!saved || (code && saved.teamCode !== code)) throw new Error('최신 팀 정보를 확인하지 못했습니다. 새로고침한 뒤 다시 시도해 주세요.');
+      localStorage.setItem('pitchcom-users', JSON.stringify(savedUsers));
+      localStorage.setItem('pitchcom-session', JSON.stringify(profileSession(saved)));
       // Remount pages so old team state and pending async callbacks cannot be reused.
       window.location.assign('/home');
-    } catch { setCodeError('팀 변경을 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.'); } finally { setSavingCode(false); }
+    } catch (failure) { setCodeError(failure instanceof Error ? failure.message : '팀 변경을 저장하지 못했습니다. 연결 상태를 확인하고 다시 시도하세요.'); } finally { setSavingCode(false); }
   };
 
   if (!ready) return null;

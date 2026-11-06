@@ -5,7 +5,7 @@ export function sameAccount(a: Account, b: Account): boolean {
 }
 export function managedTeams(users: Account[], session: Account): string[] {
   const records = [session, ...users.filter(user => user.role === 'manager' && sameAccount(user, session))];
-  return [...new Set(records.flatMap(user => [...(user.managedTeamCodes || []), user.teamCode || '']).filter(code => typeof code === 'string').map(code => code.trim().toUpperCase()).filter(Boolean))];
+  return [...new Set(records.flatMap(user => [...(user.managedTeamCodes || []), ...(user.reservedManagedTeamCodes || []), user.teamCode || '']).filter(code => typeof code === 'string').map(code => code.trim().toUpperCase()).filter(Boolean))];
 }
 
 export function ownsTeam(account: Account, code: string): boolean {
