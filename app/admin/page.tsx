@@ -11,6 +11,7 @@ import { normalizedEmail, uniqueMembers } from '../../lib/memberIdentity';
 import { COACH_TYPES, coachLabel, getCoachTypes } from '../../lib/coachTypes';
 import { participatesAsPlayer } from '../../lib/playerParticipation';
 import { syncRead, syncWrite } from '../../lib/teamSync';
+import { isActingManager, isTeamManager } from '../../lib/actingManager';
 
 interface Member {
   id: string;
@@ -24,6 +25,7 @@ interface Member {
   teamCode: string;
   joinApproved?: boolean;
   joinRequestId?: string;
+  actingManagerFor?: string[];
 }
 
 interface JoinRequest {
@@ -79,7 +81,7 @@ export default function AdminPage() {
       const cloud = await syncRead('__global__', 'users', true);
       if (!Array.isArray(cloud)) throw new Error('invalid members');
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
-      if (session.role !== 'manager' || session.teamCode !== code) return;
+      if (!isTeamManager(session, code) || session.teamCode !== code) return;
       const current: Member[] = withoutDeletedAccounts(cloud);
       setDeleteError(previous => previous === '팀원 목록을 불러오지 못했습니다. 연결 상태를 확인하고 새로고침해 주세요.' ? '' : previous);
       localStorage.setItem('pitchcom-users', JSON.stringify(current));
@@ -126,7 +128,7 @@ export default function AdminPage() {
     const raw = localStorage.getItem('pitchcom-session');
     if (!raw) { router.push('/login'); return; }
     const session = JSON.parse(raw);
-    if (session.role !== 'manager') { router.push('/home'); return; }
+    if (!isTeamManager(session, session.teamCode ?? '')) { router.push('/home'); return; }
     setMyId(session.id);
     setMyEmail(normalizedEmail(session.email));
     setTeamCode(session.teamCode ?? '');
@@ -151,7 +153,7 @@ export default function AdminPage() {
     try {
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
       const target = users.find(u => u.id === editingCoach && u.role === 'coach' && u.teamCode === teamCode);
-      if (!target || !users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('member changed');
+      if (!target || !users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && isTeamManager(u, teamCode) && u.teamCode === teamCode)) throw new Error('member changed');
       const updated = users.map(u => u.id === editingCoach ? { ...u, coachTypes: coachSelection, coachType: coachSelection.join(' · ') } : u);
       await syncWrite('__global__', 'users', updated, true);
       localStorage.setItem('pitchcom-users', JSON.stringify(updated));
@@ -166,7 +168,7 @@ export default function AdminPage() {
     setKickingId(member.id); setDeleteError('');
     try {
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
-      if (!users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('권한 변경');
+      if (!users.some(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && isTeamManager(u, teamCode) && u.teamCode === teamCode)) throw new Error('권한 변경');
       if (!users.some(u => u.id === member.id && u.teamCode === teamCode)) throw new Error('팀원 변경');
       const removalNotice = { id: crypto.randomUUID(), teamCode, createdAt: new Date().toISOString() };
       const updated = users.map(u => (u.id === member.id || (normalizedEmail(member.email) && normalizedEmail(u.email) === normalizedEmail(member.email))) && u.teamCode === teamCode
@@ -184,7 +186,7 @@ export default function AdminPage() {
     setDeletingId(member.id); setDeleteError('');
     try {
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
-      const actor = users.find(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && u.role === 'manager' && u.teamCode === teamCode);
+      const actor = users.find(u => (u.id === myId || (myEmail && normalizedEmail(u.email) === myEmail)) && isTeamManager(u, teamCode) && u.teamCode === teamCode);
       const target = users.find(u => u.id === member.id && u.teamCode === teamCode);
       if (!actor || !target) throw new Error('계정 상태 변경');
       const cached: Member[] = JSON.parse(localStorage.getItem('pitchcom-users') || '[]');
@@ -262,7 +264,7 @@ export default function AdminPage() {
         <div style={{ marginBottom: 16 }}>
           <p style={{ margin: '0 0 8px', fontSize: 12, color: '#475569', fontWeight: 700 }}>내 계정</p>
           <div style={{ padding: '14px 18px', borderRadius: 14, background: '#1e3a5f', border: '1px solid #1e40af', display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>🧢</div>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: '#1e40af', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{isActingManager(me, teamCode) ? '📋' : '🧢'}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 7 }}>
                 <span style={{ fontSize: 15, fontWeight: 800, color: '#f8fafc', overflowWrap: 'anywhere' }}>{me.name}</span>
@@ -270,7 +272,7 @@ export default function AdminPage() {
               </div>
               <div style={{ fontSize: 12, color: '#60a5fa', overflowWrap: 'anywhere' }}>{me.email}</div>
             </div>
-            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700, maxWidth: 150, overflowWrap: 'anywhere' }}>감독{me.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === me.id ? ' · ⭐ 주장' : leadership.viceCaptainId === me.id ? ' · 🌟 부주장' : ''}{getCoachTypes(me).length ? ` · ${coachLabel(me)}` : ''}</span>
+            <span style={{ fontSize: 12, color: '#3b82f6', fontWeight: 700, maxWidth: 150, overflowWrap: 'anywhere' }}>{isActingManager(me, teamCode) ? '임시감독' : '감독'}{me.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === me.id ? ' · ⭐ 주장' : leadership.viceCaptainId === me.id ? ' · 🌟 부주장' : ''}{getCoachTypes(me).length ? ` · ${coachLabel(me)}` : ''}</span>
           </div>
         </div>
       )}
@@ -300,7 +302,7 @@ export default function AdminPage() {
                   </div>
                   <div style={{ fontSize: 12, color: '#64748b', overflowWrap: 'anywhere', whiteSpace: 'normal', lineHeight: 1.6 }}>{m.email}</div>
                 </div>
-                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}{m.role !== 'player' && m.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === m.id ? ' · ⭐ 주장' : leadership.viceCaptainId === m.id ? ' · 🌟 부주장' : ''}{m.role === 'manager' && getCoachTypes(m).length ? ` · ${coachLabel(m)}` : ''}</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', maxWidth: 160, overflowWrap: 'anywhere' }}>{isActingManager(m, teamCode) ? '📋 임시감독' : m.role === 'coach' ? `📋 ${coachLabel(m)}` : (ROLE_LABEL[m.role] ?? m.role)}{m.role !== 'player' && m.playsAsPlayer ? ' · 선수 겸임' : ''}{leadership.captainId === m.id ? ' · ⭐ 주장' : leadership.viceCaptainId === m.id ? ' · 🌟 부주장' : ''}{m.role === 'manager' && getCoachTypes(m).length ? ` · ${coachLabel(m)}` : ''}</span>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   {m.role === 'coach' && <button onClick={() => { setEditingCoach(m.id); setCoachSelection(getCoachTypes(m)); setCoachError(''); }} style={{ padding: '6px 10px', borderRadius: 8, border: '1px solid #3b82f655', background: 'transparent', color: '#60a5fa', fontSize: 11, cursor: 'pointer' }}>코치 유형</button>}
                   <button disabled={Boolean(kickingId || deletingId)} onClick={() => kickMember(m)} style={{

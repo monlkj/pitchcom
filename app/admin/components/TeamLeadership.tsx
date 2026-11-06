@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { normalizedEmail } from '../../../lib/memberIdentity';
 import { syncRead, syncWrite } from '../../../lib/teamSync';
 import { EMPTY_LEADERSHIP, isEligibleLeader, resolveLeadership, type Leadership, type LeaderMember } from '../../../lib/teamLeadership';
+import { isTeamManager } from '../../../lib/actingManager';
 
 type Member = LeaderMember & { name: string; email: string };
 export default function TeamLeadership({ teamCode, members, onChange }: { teamCode: string; members: Member[]; onChange: (value: Leadership) => void }) {
@@ -29,7 +30,7 @@ export default function TeamLeadership({ teamCode, members, onChange }: { teamCo
     try {
       const session = JSON.parse(localStorage.getItem('pitchcom-session') || '{}');
       const users: Member[] = (await syncRead('__global__', 'users', true)) ?? [];
-      if (session.teamCode !== teamCode || session.role !== 'manager' || !users.some(u => (u.id === session.id || (normalizedEmail(session.email) && normalizedEmail(u.email) === normalizedEmail(session.email))) && u.role === 'manager' && u.teamCode === teamCode)) throw new Error('권한 변경');
+      if (session.teamCode !== teamCode || !isTeamManager(session, teamCode) || !users.some(u => (u.id === session.id || (normalizedEmail(session.email) && normalizedEmail(u.email) === normalizedEmail(session.email))) && isTeamManager(u, teamCode) && u.teamCode === teamCode)) throw new Error('권한 변경');
       const target = id ? users.find(u => u.id === id && isEligibleLeader(u, teamCode)) : null;
       if (id && !target) throw new Error('선수 상태 변경');
       const saved = await syncRead(teamCode, 'leadership', true);

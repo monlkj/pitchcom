@@ -1,6 +1,7 @@
 import type { IdentityProfile } from './accountIdentity';
 import { managedTeams, ownsTeam, sameAccount } from './managerTeams';
 import { normalizedEmail } from './memberIdentity';
+import { appointActingManager, releaseActingManager } from './actingManager';
 
 type SessionIdentity = { id: string; email?: string; authUserId?: string; identityVersion?: number };
 
@@ -22,7 +23,10 @@ export function planTeamChange(users: IdentityProfile[], session: SessionIdentit
     ...(leave && me.transferReturnId ? { requestTransferReturn: true } : {}),
     ...(manager ? { managedTeamCodes: [...new Set([...managedTeams(users, me), ...(code ? [code] : [])])] } : {}),
   };
-  return { unchanged: false, member, members: users.map(user => user.id === me.id ? member : user), needsRequest };
+  let members = users.map(user => user.id === me.id ? member : user);
+  if (manager && me.teamCode && me.teamCode !== code) members = appointActingManager(members, me.teamCode) as IdentityProfile[];
+  if (manager && code) members = releaseActingManager(members, code) as IdentityProfile[];
+  return { unchanged: false, member, members, needsRequest };
 }
 
 /** A return can reactivate another profile ID; follow only this verified transition. */

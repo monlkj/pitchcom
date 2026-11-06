@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { registerHooks } from 'node:module';
 registerHooks({ resolve(specifier, context, nextResolve) {
-  if (['./managerTeams', './memberIdentity'].includes(specifier)) return nextResolve(`${specifier}.ts`, context);
+  if (['./managerTeams', './memberIdentity', './actingManager', './coachTypes'].includes(specifier)) return nextResolve(`${specifier}.ts`, context);
   return nextResolve(specifier, context);
 } });
 const { planTeamChange, resolveTeamChangeResult } = await import('../lib/teamMembership.ts');
@@ -46,4 +46,12 @@ test('the saved returned profile is selected by the verified transition, not a m
 
 test('a concurrent password or identity update cannot silently refresh an old session', () => {
   assert.equal(resolveTeamChangeResult([{ ...manager, identityVersion: 2 }], manager), undefined);
+});
+
+test('moving a director appoints the approved head coach temporarily and returning releases that temporary role', () => {
+  const headCoach = { id: 'head', name: '수석', email: 'head', role: 'coach', teamCode: 'A', joinApproved: true, coachTypes: ['수석코치'] };
+  const moved = planTeamChange([{ ...manager, teamCode: 'A' }, headCoach], { ...manager, teamCode: 'A' }, 'B', false, 'unused');
+  assert.deepEqual(moved.members.find(member => member.id === 'head').actingManagerFor, ['A']);
+  const returned = planTeamChange(moved.members, moved.member, 'A', false, 'unused');
+  assert.deepEqual(returned.members.find(member => member.id === 'head').actingManagerFor, []);
 });

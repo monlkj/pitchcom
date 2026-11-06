@@ -6,6 +6,7 @@ import { COACH_TYPES } from '../../../lib/coachTypes';
 import { normalizedEmail } from '../../../lib/memberIdentity';
 import { supabase } from '../../../lib/supabase';
 import { hashTemporaryPassword } from '../../../lib/temporaryAccounts';
+import { isTeamManager } from '../../../lib/actingManager';
 
 export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode: string; onCreated: () => void }) {
   const [open, setOpen] = useState(false);
@@ -35,8 +36,8 @@ export default function TemporaryAccountForm({ teamCode, onCreated }: { teamCode
       const session = JSON.parse(raw || '{}');
       const users = await syncRead('__global__', 'users', true);
       if (!Array.isArray(users)) throw new Error('계정 목록을 확인할 수 없습니다.');
-      const actor = users.find(u => u.id === session.id && u.role === 'manager' && u.teamCode === teamCode);
-      if (!teamCode || !actor || session.role !== 'manager' || session.teamCode !== teamCode) throw new Error('현재 팀 감독만 발급할 수 있습니다.');
+      const actor = users.find(u => u.id === session.id && isTeamManager(u, teamCode) && u.teamCode === teamCode);
+      if (!teamCode || !actor || !isTeamManager(session, teamCode) || session.teamCode !== teamCode) throw new Error('현재 팀의 감독 또는 임시감독만 발급할 수 있습니다.');
       if (actor.authUserId) {
         const { data, error: authError } = await supabase.auth.getUser();
         if (authError || data.user?.id !== actor.authUserId) throw new Error('감독 계정으로 다시 로그인해 주세요.');

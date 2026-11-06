@@ -7,6 +7,7 @@ export function profileSession(user: IdentityProfile, authUserId: string | undef
     identityVersion: user.identityVersion, teamCode: user.teamCode,
     joinApproved: user.joinApproved, joinRequestId: user.joinRequestId,
     coachType: user.coachType, coachTypes: user.coachTypes, playsAsPlayer: user.playsAsPlayer,
+    actingManagerFor: user.actingManagerFor,
     managedTeamCodes: user.managedTeamCodes, reservedManagedTeamCodes: user.reservedManagedTeamCodes,
     removalNotice: user.removalNotice, transferReturnId: user.transferReturnId, teamReturn: user.teamReturn,
   };

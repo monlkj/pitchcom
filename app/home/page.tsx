@@ -10,6 +10,7 @@ import { profileSession } from '../../lib/profileSession';
 import { resolveLeadership } from '../../lib/teamLeadership';
 import { coachLabel } from '../../lib/coachTypes';
 import { migrateTeamCache } from '../../lib/teamStorage';
+import { isActingManager } from '../../lib/actingManager';
 
 const MENUS = [
   { href: '/signal', emoji: '⚡', label: '신호 전송', desc: '구종 선택 → 이어폰으로 전달', color: '#3b82f6' },
@@ -39,6 +40,7 @@ export default function Home() {
   const [savingCode, setSavingCode] = useState(false);
   const [joinApproved, setJoinApproved] = useState<boolean | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
+  const [actingManager, setActingManager] = useState(false);
 
   const checkApprovalStatus = async (sessionId: string, code: string) => {
     const cloudUsers: any[] = (await syncRead('__global__', 'users')) ?? [];
@@ -71,6 +73,8 @@ export default function Home() {
     const session = JSON.parse(raw);
     migrateTeamCache();
     if (session.removalNotice && localStorage.getItem(`pitchcomDismissedRemoval:${session.id}`) !== session.removalNotice.id) setRemovalNotice(session.removalNotice);
+    const isActing = isActingManager(session, session.teamCode ?? '');
+    setActingManager(isActing);
     setPendingCount(0);
     setReturnTeamAvailable(Boolean(session.transferReturnId));
     if (session.teamReturn && localStorage.getItem(`pitchcomDismissedReturn:${session.id}`) !== session.teamReturn.at) setReturnedTeam(session.teamCode || '무소속');
@@ -82,7 +86,7 @@ export default function Home() {
     setJoinApproved(session.joinApproved ?? null);
     setReady(true);
     // 감독: 가입 요청 수 확인
-    if (session.role === 'manager' && session.teamCode) {
+    if ((session.role === 'manager' || isActing) && session.teamCode) {
       syncRead(session.teamCode, 'join-requests').then((reqs: any) => {
         if (Array.isArray(reqs)) setPendingCount(reqs.filter((r: any) => r.status === 'pending').length);
       });
@@ -359,8 +363,8 @@ export default function Home() {
               ))}
             </div>
 
-            {/* 감독 전용 관리 버튼 */}
-            {userRole === 'manager' && (
+            {/* 감독 또는 임시감독 관리 버튼 */}
+            {(userRole === 'manager' || actingManager) && (
               <button
                 className="menu-card"
                 onClick={() => router.push('/admin')}
@@ -378,7 +382,7 @@ export default function Home() {
                   {pendingCount > 0 && <span style={{ position: 'absolute', top: -4, right: -4, width: 18, height: 18, borderRadius: '50%', background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{pendingCount}</span>}
                 </div>
                 <div>
-                  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>감독 관리</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>{actingManager ? '임시감독 관리' : '감독 관리'}</div>
                   <div style={{ fontSize: 13, color: pendingCount > 0 ? '#f59e0b' : '#64748b' }}>{pendingCount > 0 ? `가입 요청 ${pendingCount}건 대기 중` : '멤버 확인 및 계정 관리'}</div>
                 </div>
                 <span style={{ marginLeft: 'auto', color: '#334155', fontSize: 18 }}>›</span>
